@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
+import { validateEnvironment } from './config/environment';
 import LoginPage from './components/LoginPage';
 import MainDashboard from './components/MainDashboard';
 import TrainingPage from './components/TrainingPage';
@@ -18,8 +19,22 @@ function App() {
   const [currentPage, setCurrentPage] = useState<PageType>('dashboard');
   const [error, setError] = useState<string | null>(null);
 
+  // Verificar configuração de ambiente na inicialização
+  useEffect(() => {
+    const envValidation = validateEnvironment();
+    if (!envValidation.isValid) {
+      console.error('❌ [APP] Configuração de ambiente inválida:', envValidation.missingVars);
+      setError(`Configuração incompleta. Verifique as variáveis de ambiente: ${envValidation.missingVars.join(', ')}`);
+      setIsLoading(false);
+      return;
+    }
+  }, []);
+
   useEffect(() => {
     console.log('🔄 [APP] useEffect executando - verificando sessão...');
+    
+    // Não prosseguir se há erro de configuração
+    if (error) return;
     
     const checkSession = async () => {
       console.log('📡 [APP] Iniciando verificação de sessão...');
@@ -78,7 +93,7 @@ function App() {
       console.log('🧹 [APP] Limpando subscription...');
       subscription.unsubscribe();
     };
-  }, []);
+  }, [error]);
 
   const handleLogin = (userData: any) => {
     console.log('✅ [APP] Login realizado:', userData?.email);
@@ -138,6 +153,12 @@ function App() {
           <div className="text-white text-xl font-medium">Erro na Aplicação</div>
           <div className="text-gray-300 bg-gray-900/50 border border-gray-700 rounded-lg p-4">
             {error}
+          </div>
+          <div className="text-gray-400 text-sm bg-gray-800/50 border border-gray-600 rounded-lg p-3">
+            <strong>Verifique seu arquivo .env:</strong><br/>
+            • VITE_SUPABASE_URL<br/>
+            • VITE_SUPABASE_ANON_KEY<br/>
+            • VITE_WEBHOOK_BASE_URL
           </div>
           <button 
             onClick={() => window.location.reload()} 

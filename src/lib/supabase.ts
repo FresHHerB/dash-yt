@@ -1,7 +1,15 @@
 import { createClient } from '@supabase/supabase-js';
-import { env } from '../config/environment';
+import { env, validateEnvironment } from '../config/environment';
 
 console.log('🔧 [SUPABASE] Inicializando cliente...');
+
+// Validar variáveis de ambiente
+const envValidation = validateEnvironment();
+if (!envValidation.isValid) {
+  console.error('❌ [SUPABASE] ERRO CRÍTICO: Variáveis de ambiente obrigatórias não configuradas!');
+  console.error('❌ [SUPABASE] Variáveis ausentes:', envValidation.missingVars);
+  throw new Error(`Configuração incompleta. Variáveis ausentes: ${envValidation.missingVars.join(', ')}`);
+}
 
 // Verificar variáveis de ambiente
 const supabaseUrl = env.supabase.url;
@@ -9,13 +17,7 @@ const supabaseAnonKey = env.supabase.anonKey;
 
 console.log('🔍 [SUPABASE] URL presente:', !!supabaseUrl);
 console.log('🔍 [SUPABASE] Anon Key presente:', !!supabaseAnonKey);
-
-// Validar variáveis de ambiente obrigatórias
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.error('❌ [SUPABASE] ERRO CRÍTICO: Variáveis de ambiente do Supabase não configuradas!');
-  console.error('❌ [SUPABASE] Verifique se VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY estão definidas');
-  throw new Error('Configuração do Supabase não encontrada. Verifique as variáveis de ambiente.');
-}
+console.log('🔍 [SUPABASE] Webhook Base URL presente:', !!env.webhooks.baseUrl);
 
 // Criar cliente Supabase
 console.log('✅ [SUPABASE] Criando cliente Supabase...');

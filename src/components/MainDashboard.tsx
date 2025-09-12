@@ -171,7 +171,7 @@ const MainDashboard: React.FC<MainDashboardProps> = ({ user, onLogout, onNavigat
                   </div>
                   <div className="hidden md:block text-left">
                     <p className="text-white text-sm font-medium">{user?.email || 'Usuário'}</p>
-                    <p className="text-gray-400 text-xs">Admin</p>
+                    <p className="text-gray-400 text-xs">Autenticado</p>
                   </div>
                   <MoreVertical className="w-4 h-4 text-gray-400" />
                 </button>

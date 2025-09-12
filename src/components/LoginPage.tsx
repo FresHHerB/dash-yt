@@ -21,6 +21,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isSignUpMode, setIsSignUpMode] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,7 +51,16 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
 
       if (error) {
         console.error('❌ [LOGIN] Erro no login:', error);
-        setError(error.message || 'Credenciais inválidas');
+        // Traduzir mensagens de erro comuns
+        let errorMessage = 'Credenciais inválidas';
+        if (error.message.includes('Invalid login credentials')) {
+          errorMessage = 'Email ou senha incorretos';
+        } else if (error.message.includes('Email not confirmed')) {
+          errorMessage = 'Email não confirmado. Verifique sua caixa de entrada.';
+        } else if (error.message.includes('Too many requests')) {
+          errorMessage = 'Muitas tentativas. Tente novamente em alguns minutos.';
+        }
+        setError(errorMessage);
         return;
       }
 
@@ -68,14 +79,45 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
     }
   };
 
-  // Função de teste para pular login
-  const handleTestLogin = () => {
-    console.log('🧪 [LOGIN] Login de teste ativado');
-    onLogin({ 
-      email: 'test@example.com', 
-      id: 'test-user-id',
-      user_metadata: {}
-    });
+  const handleSignUp = async () => {
+    if (!email.trim() || !password.trim()) {
+      setError('Por favor, preencha todos os campos para criar uma conta');
+      return;
+    }
+
+    setIsLoading(true);
+    setError('');
+
+    try {
+      console.log('📡 [LOGIN] Criando nova conta...');
+      const { data, error } = await supabase.auth.signUp({
+        email: email.trim(),
+        password: password,
+      });
+
+      if (error) {
+        console.error('❌ [LOGIN] Erro ao criar conta:', error);
+        let errorMessage = 'Erro ao criar conta';
+        if (error.message.includes('User already registered')) {
+          errorMessage = 'Este email já está cadastrado. Tente fazer login.';
+        } else if (error.message.includes('Password should be at least')) {
+          errorMessage = 'A senha deve ter pelo menos 6 caracteres';
+        }
+        setError(errorMessage);
+        return;
+      }
+
+      if (data.user) {
+        console.log('✅ [LOGIN] Conta criada:', data.user.email);
+        setError('');
+        setMessage({ type: 'success', text: 'Conta criada com sucesso! Você pode fazer login agora.' });
+      }
+    } catch (err) {
+      console.error('💥 [LOGIN] Erro ao criar conta:', err);
+      setError('Erro interno. Tente novamente.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -90,13 +132,13 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
             Dashboard de Roteiros
           </h1>
           <p className="text-gray-400">
-            Acesse sua conta para continuar
+            {isSignUpMode ? 'Crie sua conta para começar' : 'Acesse sua conta para continuar'}
           </p>
         </div>
 
         {/* Login Form */}
         <div className="bg-gray-900/50 backdrop-blur-xl rounded-2xl border border-gray-800 p-8">
-          <form onSubmit={handleLogin} className="space-y-6">
+          <form onSubmit={isSignUpMode ? handleSignUp : handleLogin} className="space-y-6">
             {/* Email Field */}
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-300">
@@ -135,7 +177,24 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
                   {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                 </button>
               </div>
+              {isSignUpMode && (
+                <div className="text-xs text-gray-400">
+                  A senha deve ter pelo menos 6 caracteres
+                </div>
+              )}
             </div>
+
+            {/* Success Message */}
+            {message && (
+              <div className={`flex items-center space-x-2 p-3 rounded-lg text-sm ${
+                message.type === 'success' 
+                  ? 'bg-green-900/20 border border-green-800 text-green-400' 
+                  : 'bg-red-900/20 border border-red-800 text-red-400'
+              }`}>
+                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                <span>{message.text}</span>
+              </div>
+            )}
 
             {/* Error Message */}
             {error && (
@@ -145,7 +204,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
               </div>
             )}
 
-            {/* Login Button */}
+            {/* Submit Button */}
             <button
               type="submit"
               disabled={isLoading || !email.trim() || !password.trim()}
@@ -160,23 +219,31 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
               {isLoading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Entrando...</span>
+                  <span>{isSignUpMode ? 'Criando conta...' : 'Entrando...'}</span>
                 </>
               ) : (
                 <>
                   <LogIn className="w-5 h-5" />
-                  <span>Entrar</span>
+                  <span>{isSignUpMode ? 'Criar Conta' : 'Entrar'}</span>
                 </>
               )}
             </button>
 
-            {/* Test Login Button */}
+            {/* Toggle Mode Button */}
             <button
               type="button"
-              onClick={handleTestLogin}
-              className="w-full flex items-center justify-center space-x-2 py-2 px-4 rounded-xl font-medium transition-all duration-200 bg-yellow-600 text-white hover:bg-yellow-700 text-sm"
+              onClick={() => {
+                setIsSignUpMode(!isSignUpMode);
+                setError('');
+                setMessage(null);
+              }}
+              disabled={isLoading}
+              className="w-full text-center py-2 px-4 text-gray-400 hover:text-white transition-colors text-sm"
             >
-              🧪 Login de Teste (Pular Autenticação)
+              {isSignUpMode 
+                ? 'Já tem uma conta? Fazer login' 
+                : 'Não tem uma conta? Criar conta'
+              }
             </button>
           </form>
         </div>
@@ -185,6 +252,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ onLogin }) => {
         <div className="text-center mt-6">
           <p className="text-gray-400 text-sm">
             Sistema de criação de roteiros automatizados
+          </p>
+          <p className="text-gray-500 text-xs mt-2">
+            Autenticação segura via Supabase
           </p>
         </div>
       </div>

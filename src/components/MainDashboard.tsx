@@ -69,6 +69,12 @@ const MainDashboard: React.FC<MainDashboardProps> = ({ user, onLogout, onNavigat
       });
     } catch (error) {
       console.error('❌ [DASHBOARD] Erro ao carregar estatísticas:', error);
+      // Em caso de erro, manter valores zerados ao invés de quebrar a interface
+      setStatistics({
+        roteiros: 0,
+        canais: 0,
+        vozes: 0
+      });
     } finally {
       setIsLoadingStats(false);
     }

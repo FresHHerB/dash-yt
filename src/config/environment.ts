@@ -8,7 +8,7 @@ export const env = {
 
   // Webhook Configuration
   webhooks: {
-    baseUrl: import.meta.env.VITE_WEBHOOK_BASE_URL || 'https://autodark-n8n.tmtibo.easypanel.host/',
+    baseUrl: import.meta.env.VITE_WEBHOOK_BASE_URL || '',
     endpoints: {
       updatePrompts: import.meta.env.VITE_WEBHOOK_UPDATE_PROMPTS || '/webhook/updatePrompts',
       generateContent: import.meta.env.VITE_WEBHOOK_GENERATE_CONTENT || '/webhook/gerarConteudo',
@@ -28,8 +28,29 @@ export const env = {
   }
 };
 
+// Validation function to ensure all required environment variables are set
+export const validateEnvironment = (): { isValid: boolean; missingVars: string[] } => {
+  const requiredVars = [
+    { key: 'VITE_SUPABASE_URL', value: env.supabase.url },
+    { key: 'VITE_SUPABASE_ANON_KEY', value: env.supabase.anonKey },
+    { key: 'VITE_WEBHOOK_BASE_URL', value: env.webhooks.baseUrl },
+  ];
+
+  const missingVars = requiredVars
+    .filter(({ value }) => !value || value.trim() === '')
+    .map(({ key }) => key);
+
+  return {
+    isValid: missingVars.length === 0,
+    missingVars
+  };
+};
+
 // Helper functions to build complete URLs
 export const buildWebhookUrl = (endpoint: keyof typeof env.webhooks.endpoints): string => {
+  if (!env.webhooks.baseUrl) {
+    throw new Error('VITE_WEBHOOK_BASE_URL não está configurada no arquivo .env');
+  }
   return `${env.webhooks.baseUrl}${env.webhooks.endpoints[endpoint]}`;
 };
 

@@ -89,11 +89,19 @@ function App() {
   const handleLogout = async () => {
     console.log('👋 [APP] Fazendo logout...');
     try {
-      await supabase.auth.signOut();
+      const { error } = await supabase.auth.signOut();
+      if (error) {
+        console.error('❌ [APP] Erro no logout:', error);
+        setError(`Erro no logout: ${error.message}`);
+        return;
+      }
+      console.log('✅ [APP] Logout realizado com sucesso');
+      setUser(null);
       setCurrentPage('dashboard');
       setError(null);
     } catch (error) {
       console.error('❌ [APP] Erro no logout:', error);
+      setError('Erro interno no logout');
     }
   };
 

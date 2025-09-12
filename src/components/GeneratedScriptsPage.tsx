@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { buildWebhookUrl } from '../config/environment';
 import { 
   Play,
   Square,
@@ -197,7 +198,7 @@ const GeneratedScriptsPage: React.FC<GeneratedScriptsPageProps> = ({ user, onBac
     setMessage(null);
 
     try {
-      const response = await fetch('https://n8n-n8n.h5wo9n.easypanel.host/webhook/excluirRoteiro', {
+      const response = await fetch(buildWebhookUrl('deleteScript'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

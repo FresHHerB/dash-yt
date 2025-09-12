@@ -1,10 +1,11 @@
 import { createClient } from '@supabase/supabase-js';
+import { env } from '../config/environment';
 
 console.log('🔧 [SUPABASE] Inicializando cliente...');
 
 // Verificar variáveis de ambiente
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const supabaseUrl = env.supabase.url;
+const supabaseAnonKey = env.supabase.anonKey;
 
 console.log('🔍 [SUPABASE] URL presente:', !!supabaseUrl);
 console.log('🔍 [SUPABASE] Anon Key presente:', !!supabaseAnonKey);

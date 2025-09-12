@@ -19,6 +19,7 @@ import {
 import { ScriptData, TrainingData } from '../types';
 import { PageType } from '../App';
 import { supabase } from '../lib/supabase';
+import { buildWebhookUrl, buildElevenLabsUrl, buildFishAudioUrl } from '../config/environment';
 import PageHeader from './shared/PageHeader';
 
 interface TrainingPageProps {
@@ -154,7 +155,7 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
           throw new Error(`API key não encontrada para ${voice.plataforma}`);
         }
 
-        const response = await fetch(`https://api.elevenlabs.io/v1/voices/${voice.voice_id}`, {
+        const response = await fetch(buildElevenLabsUrl(`/voices/${voice.voice_id}`), {
           method: 'GET',
           headers: {
             'xi-api-key': apisData.api_key
@@ -185,7 +186,7 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
           throw new Error(`API key não encontrada para ${voice.plataforma}`);
         }
 
-        const response = await fetch(`https://api.fish.audio/model/${voice.voice_id}`, {
+        const response = await fetch(buildFishAudioUrl(`/model/${voice.voice_id}`), {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${apisData.api_key}`,
@@ -315,7 +316,7 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
         modelo: trainingData.model
       };
 
-      const response = await fetch('https://n8n-n8n.h5wo9n.easypanel.host/webhook/guiaRoteiro', {
+      const response = await fetch(buildWebhookUrl('guideScript'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -387,7 +388,7 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
 
       console.log('📤 Payload enviado:', payload);
 
-      const response = await fetch('https://n8n-n8n.h5wo9n.easypanel.host/webhook/updatePrompts', {
+      const response = await fetch(buildWebhookUrl('updatePrompts'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

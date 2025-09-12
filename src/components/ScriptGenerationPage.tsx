@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { buildWebhookUrl, buildElevenLabsUrl, buildFishAudioUrl } from '../config/environment';
 import { 
   ArrowLeft, 
   Wand2, 
@@ -231,7 +232,7 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
           throw new Error(`API key não encontrada para ${voice.plataforma}`);
         }
 
-        const response = await fetch(`https://api.elevenlabs.io/v1/voices/${voice.voice_id}`, {
+        const response = await fetch(buildElevenLabsUrl(`/voices/${voice.voice_id}`), {
           method: 'GET',
           headers: {
             'xi-api-key': apisData.api_key
@@ -262,7 +263,7 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
           throw new Error(`API key não encontrada para ${voice.plataforma}`);
         }
 
-        const response = await fetch(`https://api.fish.audio/model/${voice.voice_id}`, {
+        const response = await fetch(buildFishAudioUrl(`/model/${voice.voice_id}`), {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${apisData.api_key}`,
@@ -412,7 +413,7 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
 
       console.log('📤 Payload enviado:', payload);
 
-      const response = await fetch('https://n8n-n8n.h5wo9n.easypanel.host/webhook/gerarConteudo', {
+      const response = await fetch(buildWebhookUrl('generateContent'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

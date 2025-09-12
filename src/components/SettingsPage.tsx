@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { audioApiService } from '../lib/audioApiService';
+import { buildElevenLabsUrl, buildFishAudioUrl } from '../config/environment';
 import { 
   Settings, 
   ArrowLeft, 
@@ -291,7 +292,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ user, onBack, onNavigate })
 
         if (platform === 'ElevenLabs') {
           console.log('🎵 [collectVoiceData] Processando ElevenLabs...');
-          const response = await fetch(`https://api.elevenlabs.io/v1/voices/${voiceId}`, {
+          const response = await fetch(buildElevenLabsUrl(`/voices/${voiceId}`), {
             method: 'GET',
             headers: {
               'xi-api-key': apiData.api_key
@@ -334,7 +335,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ user, onBack, onNavigate })
 
         } else if (platform === 'Fish-Audio') {
           console.log('🐟 [collectVoiceData] Processando Fish-Audio...');
-          const response = await fetch(`https://api.fish.audio/model/${voiceId}`, {
+          const response = await fetch(buildFishAudioUrl(`/model/${voiceId}`), {
             method: 'GET',
             headers: {
               'Authorization': `Bearer ${apiData.api_key}`,
@@ -648,7 +649,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ user, onBack, onNavigate })
         }
 
         // Buscar dados da voz para obter o preview_url
-        const response = await fetch(`https://api.elevenlabs.io/v1/voices/${voice.voice_id}`, {
+        const response = await fetch(buildElevenLabsUrl(`/voices/${voice.voice_id}`), {
           method: 'GET',
           headers: {
             'xi-api-key': apiData.api_key
@@ -677,7 +678,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ user, onBack, onNavigate })
         }
 
         // Para Fish-Audio, buscamos os dados do modelo para obter o sample de áudio
-        const response = await fetch(`https://api.fish.audio/model/${voice.voice_id}`, {
+        const response = await fetch(buildFishAudioUrl(`/model/${voice.voice_id}`), {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${apiData.api_key}`,

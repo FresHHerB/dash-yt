@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
+import { buildWebhookUrl, buildElevenLabsUrl, buildFishAudioUrl } from '../config/environment';
 import { 
   Edit3, 
   X, 
@@ -183,7 +184,7 @@ const PromptManagementPage: React.FC<PromptManagementPageProps> = ({ user, onBac
 
       console.log('📤 Payload enviado:', payload);
 
-      const response = await fetch('https://n8n-n8n.h5wo9n.easypanel.host/webhook/updatePrompts', {
+      const response = await fetch(buildWebhookUrl('updatePrompts'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -266,7 +267,7 @@ const PromptManagementPage: React.FC<PromptManagementPageProps> = ({ user, onBac
         }
 
         // Buscar dados da voz para obter o preview_url
-        const response = await fetch(`https://api.elevenlabs.io/v1/voices/${voice.voice_id}`, {
+        const response = await fetch(buildElevenLabsUrl(`/voices/${voice.voice_id}`), {
           method: 'GET',
           headers: {
             'xi-api-key': apisData.api_key
@@ -300,7 +301,7 @@ const PromptManagementPage: React.FC<PromptManagementPageProps> = ({ user, onBac
         }
 
         // Para Fish-Audio, buscamos os dados do modelo para obter o sample de áudio
-        const response = await fetch(`https://api.fish.audio/model/${voice.voice_id}`, {
+        const response = await fetch(buildFishAudioUrl(`/model/${voice.voice_id}`), {
           method: 'GET',
           headers: {
             'Authorization': `Bearer ${apisData.api_key}`,

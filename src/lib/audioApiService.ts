@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { env } from '../config/environment';
 
 export interface VoiceData {
   voice_id: string;
@@ -24,11 +25,11 @@ export interface VoiceListResponse {
 
 class AudioApiService {
   private getSupabaseUrl() {
-    return import.meta.env.VITE_SUPABASE_URL;
+    return env.supabase.url;
   }
 
   private getSupabaseAnonKey() {
-    return import.meta.env.VITE_SUPABASE_ANON_KEY;
+    return env.supabase.anonKey;
   }
 
   /**

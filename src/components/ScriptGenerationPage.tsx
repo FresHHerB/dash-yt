@@ -17,10 +17,22 @@ import {
   Hash,
   Trash2,
   Edit3,
-  CheckCircle
+  CheckCircle,
+  Bot,
+  Sparkles
 } from 'lucide-react';
 import { PageType } from '../App';
 import PageHeader from './shared/PageHeader';
+
+interface Channel {
+  id: number;
+  nome_canal: string;
+  prompt_titulo: string;
+  prompt_roteiro: string;
+  created_at: string;
+  voz_prefereida?: number;
+  media_chars?: number;
+}
 
 interface Voice {
   id: number;
@@ -45,17 +57,23 @@ interface GeneratedScript {
   plataforma?: string;
 }
 
-interface ScriptListPageProps {
+interface ScriptGenerationPageProps {
   user: any;
   onBack: () => void;
   onNavigate?: (page: PageType) => void;
 }
 
-const ScriptListPage: React.FC<ScriptListPageProps> = ({ user, onBack, onNavigate }) => {
-  const [scripts, setScripts] = useState<GeneratedScript[]>([]);
+const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBack, onNavigate }) => {
+  const [channels, setChannels] = useState<Channel[]>([]);
   const [voices, setVoices] = useState<Voice[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [selectedChannel, setSelectedChannel] = useState<number | null>(null);
+  const [selectedVoice, setSelectedVoice] = useState<number | null>(null);
+  const [generationType, setGenerationType] = useState<'script' | 'script-audio' | 'audio'>('script');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingChannels, setIsLoadingChannels] = useState(true);
+  const [isLoadingVoices, setIsLoadingVoices] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [generatedScripts, setGeneratedScripts] = useState<GeneratedScript[]>([]);
   const [playingAudio, setPlayingAudio] = useState<{ id: string; audio: HTMLAudioElement } | null>(null);
   const [downloadingAudios, setDownloadingAudios] = useState<Set<string>>(new Set());
   const [deletingScripts, setDeletingScripts] = useState<Set<string>>(new Set());
@@ -67,11 +85,39 @@ const ScriptListPage: React.FC<ScriptListPageProps> = ({ user, onBack, onNavigat
   const [modalMessage, setModalMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   useEffect(() => {
+    loadChannels();
     loadVoices();
-    loadScripts();
+    loadGeneratedScripts();
   }, []);
 
+  const loadChannels = async () => {
+    setIsLoadingChannels(true);
+    try {
+      const { data, error } = await supabase
+        .from('canais')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Erro ao carregar canais:', error);
+        setMessage({ type: 'error', text: 'Erro ao carregar canais.' });
+      } else {
+        setChannels(data || []);
+        if (data && data.length > 0 && !selectedChannel) {
+          setSelectedChannel(data[0].id);
+          setSelectedVoice(data[0].voz_prefereida || null);
+        }
+      }
+    } catch (err) {
+      console.error('Erro de conexão ao carregar canais:', err);
+      setMessage({ type: 'error', text: 'Erro de conexão.' });
+    } finally {
+      setIsLoadingChannels(false);
+    }
+  };
+
   const loadVoices = async () => {
+    setIsLoadingVoices(true);
     try {
       const { data, error } = await supabase
         .from('vozes')
@@ -85,11 +131,12 @@ const ScriptListPage: React.FC<ScriptListPageProps> = ({ user, onBack, onNavigat
       }
     } catch (err) {
       console.error('Erro de conexão ao carregar vozes:', err);
+    } finally {
+      setIsLoadingVoices(false);
     }
   };
 
-  const loadScripts = async () => {
-    setIsLoading(true);
+  const loadGeneratedScripts = async () => {
     try {
       const { data, error } = await supabase
         .from('roteiros_gerados')
@@ -99,26 +146,122 @@ const ScriptListPage: React.FC<ScriptListPageProps> = ({ user, onBack, onNavigat
             nome_canal
           )
         `)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false })
+        .limit(10);
 
       if (error) {
-        console.error('Erro ao carregar roteiros:', error);
-        setMessage({ type: 'error', text: 'Erro ao carregar roteiros.' });
+        console.error('Erro ao carregar roteiros gerados:', error);
       } else {
         const formattedScripts = (data || []).map(script => ({
           ...script,
           nome_canal: script.canais?.nome_canal || 'Canal não encontrado'
         }));
-        setScripts(formattedScripts);
+        setGeneratedScripts(formattedScripts);
       }
     } catch (err) {
-      console.error('Erro de conexão ao carregar roteiros:', err);
-      setMessage({ type: 'error', text: 'Erro de conexão.' });
+      console.error('Erro de conexão ao carregar roteiros gerados:', err);
+    }
+  };
+
+  const handleChannelChange = (channelId: number) => {
+    setSelectedChannel(channelId);
+    const channel = channels.find(c => c.id === channelId);
+    if (channel?.voz_prefereida) {
+      setSelectedVoice(channel.voz_prefereida);
+    }
+  };
+
+  const generateContent = async () => {
+    if (!selectedChannel) {
+      setMessage({ type: 'error', text: 'Por favor, selecione um canal.' });
+      return;
+    }
+
+    if ((generationType === 'script-audio' || generationType === 'audio') && !selectedVoice) {
+      setMessage({ type: 'error', text: 'Por favor, selecione uma voz para gerar áudio.' });
+      return;
+    }
+
+    setIsLoading(true);
+    setMessage(null);
+
+    try {
+      const selectedChannelData = channels.find(c => c.id === selectedChannel);
+      const selectedVoiceData = voices.find(v => v.id === selectedVoice);
+
+      let webhookEndpoint: string;
+      let payload: any = {
+        id_canal: selectedChannel,
+        nome_canal: selectedChannelData?.nome_canal || '',
+      };
+
+      switch (generationType) {
+        case 'script':
+          webhookEndpoint = buildWebhookUrl('generateScript');
+          break;
+        case 'script-audio':
+          webhookEndpoint = buildWebhookUrl('generateScriptAndAudio');
+          payload.id_voz = selectedVoice;
+          payload.voice_id = selectedVoiceData?.voice_id || '';
+          payload.plataforma = selectedVoiceData?.plataforma || '';
+          break;
+        case 'audio':
+          webhookEndpoint = buildWebhookUrl('generateAudio');
+          payload.id_voz = selectedVoice;
+          payload.voice_id = selectedVoiceData?.voice_id || '';
+          payload.plataforma = selectedVoiceData?.plataforma || '';
+          break;
+        default:
+          throw new Error('Tipo de geração inválido');
+      }
+
+      console.log('📤 Enviando requisição:', { webhookEndpoint, payload });
+
+      const response = await fetch(webhookEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      console.log('📡 Response status:', response.status);
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Conteúdo gerado com sucesso:', result);
+        
+        let successMessage = '';
+        switch (generationType) {
+          case 'script':
+            successMessage = 'Roteiro gerado com sucesso!';
+            break;
+          case 'script-audio':
+            successMessage = 'Roteiro e áudio gerados com sucesso!';
+            break;
+          case 'audio':
+            successMessage = 'Áudio gerado com sucesso!';
+            break;
+        }
+        
+        setMessage({ type: 'success', text: successMessage });
+        
+        // Recarregar lista de roteiros gerados
+        await loadGeneratedScripts();
+      } else {
+        const errorText = await response.text();
+        console.error('❌ Erro na resposta:', errorText);
+        throw new Error(`Erro ${response.status}: ${response.statusText}`);
+      }
+    } catch (error) {
+      console.error('❌ Erro ao gerar conteúdo:', error);
+      setMessage({ type: 'error', text: 'Erro ao gerar conteúdo. Tente novamente.' });
     } finally {
       setIsLoading(false);
     }
   };
 
+  // Audio control functions
   const playAudio = (audioUrl: string, audioId: string) => {
     if (playingAudio) {
       playingAudio.audio.pause();
@@ -193,22 +336,28 @@ const ScriptListPage: React.FC<ScriptListPageProps> = ({ user, onBack, onNavigat
     setDeletingScripts(prev => new Set(prev).add(scriptId));
     
     try {
-      const { error } = await supabase
-        .from('roteiros_gerados')
-        .delete()
-        .eq('id', scriptId);
+      const response = await fetch(buildWebhookUrl('deleteScript'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          id_roteiro: scriptId
+        }),
+      });
 
-      if (error) {
-        console.error('Erro ao excluir roteiro:', error);
-        setMessage({ type: 'error', text: 'Erro ao excluir roteiro.' });
-        return;
+      if (!response.ok) {
+        throw new Error(`Erro ${response.status}: ${response.statusText}`);
       }
 
-      setScripts(prev => prev.filter(script => script.id !== scriptId));
+      const result = await response.json();
+      console.log('Roteiro excluído com sucesso:', result);
+      
+      setGeneratedScripts(prev => prev.filter(script => script.id !== scriptId));
       setMessage({ type: 'success', text: 'Roteiro excluído com sucesso!' });
     } catch (err) {
       console.error('Erro ao excluir roteiro:', err);
-      setMessage({ type: 'error', text: 'Erro de conexão ao excluir roteiro.' });
+      setMessage({ type: 'error', text: 'Erro ao excluir roteiro.' });
     } finally {
       setDeletingScripts(prev => {
         const newSet = new Set(prev);
@@ -303,11 +452,38 @@ const ScriptListPage: React.FC<ScriptListPageProps> = ({ user, onBack, onNavigat
     return voice ? `${voice.nome_voz} (${voice.plataforma})` : 'Voz não encontrada';
   };
 
+  const generationOptions = [
+    {
+      id: 'script',
+      title: 'Apenas Roteiro',
+      description: 'Gera apenas o texto do roteiro',
+      icon: FileText,
+      color: 'from-blue-500 to-blue-600',
+      requiresVoice: false
+    },
+    {
+      id: 'script-audio',
+      title: 'Roteiro + Áudio',
+      description: 'Gera roteiro e converte em áudio',
+      icon: Mic,
+      color: 'from-purple-500 to-purple-600',
+      requiresVoice: true
+    },
+    {
+      id: 'audio',
+      title: 'Apenas Áudio',
+      description: 'Gera áudio de roteiro existente',
+      icon: Volume2,
+      color: 'from-green-500 to-green-600',
+      requiresVoice: true
+    }
+  ];
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
       <PageHeader
         user={user}
-        currentPage="scripts"
+        currentPage="generate"
         onBack={onBack}
         onNavigate={onNavigate}
       />
@@ -324,55 +500,170 @@ const ScriptListPage: React.FC<ScriptListPageProps> = ({ user, onBack, onNavigat
           </div>
         )}
 
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-light text-white mb-2">Roteiros Gerados</h1>
-          <p className="text-gray-400">Visualize e gerencie todos os roteiros criados</p>
-        </div>
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-8">
+          {/* Generation Panel */}
+          <div className="xl:col-span-2 space-y-8">
+            {/* Generation Type Selection */}
+            <div className="bg-gray-900/50 backdrop-blur-xl rounded-2xl border border-gray-800 p-8">
+              <div className="mb-6">
+                <h2 className="text-2xl font-light text-white mb-2">Tipo de Geração</h2>
+                <p className="text-gray-400 text-sm">Escolha o que deseja gerar</p>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {generationOptions.map((option) => {
+                  const IconComponent = option.icon;
+                  return (
+                    <button
+                      key={option.id}
+                      onClick={() => setGenerationType(option.id as any)}
+                      className={`p-6 rounded-xl border transition-all duration-300 transform hover:scale-105 ${
+                        generationType === option.id
+                          ? 'bg-gradient-to-br ' + option.color + ' border-transparent text-white'
+                          : 'bg-gray-800/50 border-gray-700 text-gray-300 hover:border-gray-600'
+                      }`}
+                    >
+                      <div className="flex flex-col items-center space-y-3">
+                        <IconComponent className="w-8 h-8" />
+                        <div className="text-center">
+                          <div className="font-medium">{option.title}</div>
+                          <div className="text-sm opacity-80 mt-1">{option.description}</div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-        {/* Content */}
-        {isLoading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="flex items-center space-x-3 text-gray-400">
-              <Loader2 className="w-6 h-6 animate-spin" />
-              <span>Carregando roteiros...</span>
+            {/* Channel Selection */}
+            <div className="bg-gray-900/50 backdrop-blur-xl rounded-2xl border border-gray-800 p-8">
+              <div className="mb-6">
+                <h2 className="text-2xl font-light text-white mb-2">Canal</h2>
+                <p className="text-gray-400 text-sm">Selecione o canal para gerar conteúdo</p>
+              </div>
+              
+              {isLoadingChannels ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                  <span className="ml-2 text-gray-400">Carregando canais...</span>
+                </div>
+              ) : channels.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-400">Nenhum canal encontrado. Crie um canal primeiro.</p>
+                </div>
+              ) : (
+                <select
+                  value={selectedChannel || ''}
+                  onChange={(e) => handleChannelChange(parseInt(e.target.value))}
+                  className="w-full p-4 bg-black border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white"
+                >
+                  <option value="">Selecione um canal</option>
+                  {channels.map((channel) => (
+                    <option key={channel.id} value={channel.id}>
+                      {channel.nome_canal}
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            {/* Voice Selection */}
+            {(generationType === 'script-audio' || generationType === 'audio') && (
+              <div className="bg-gray-900/50 backdrop-blur-xl rounded-2xl border border-gray-800 p-8">
+                <div className="mb-6">
+                  <h2 className="text-2xl font-light text-white mb-2">Voz</h2>
+                  <p className="text-gray-400 text-sm">Selecione a voz para gerar o áudio</p>
+                </div>
+                
+                {isLoadingVoices ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                    <span className="ml-2 text-gray-400">Carregando vozes...</span>
+                  </div>
+                ) : voices.length === 0 ? (
+                  <div className="text-center py-8">
+                    <p className="text-gray-400">Nenhuma voz encontrada. Configure vozes primeiro.</p>
+                  </div>
+                ) : (
+                  <select
+                    value={selectedVoice || ''}
+                    onChange={(e) => setSelectedVoice(e.target.value ? parseInt(e.target.value) : null)}
+                    className="w-full p-4 bg-black border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white"
+                  >
+                    <option value="">Selecione uma voz</option>
+                    {voices.map((voice) => (
+                      <option key={voice.id} value={voice.id}>
+                        {voice.nome_voz} - {voice.plataforma}
+                      </option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+
+            {/* Generate Button */}
+            <div className="flex justify-center">
+              <button
+                onClick={generateContent}
+                disabled={!selectedChannel || isLoading || ((generationType === 'script-audio' || generationType === 'audio') && !selectedVoice)}
+                className={`
+                  flex items-center space-x-3 px-12 py-4 rounded-xl font-medium transition-all duration-300 transform
+                  ${!selectedChannel || isLoading || ((generationType === 'script-audio' || generationType === 'audio') && !selectedVoice)
+                    ? 'bg-gray-800 text-gray-600 cursor-not-allowed border border-gray-700'
+                    : 'bg-white text-black hover:bg-gray-100 hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl'
+                  }
+                `}
+              >
+                {isLoading ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                    <span>Gerando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Wand2 className="w-5 h-5" />
+                    <span>Gerar Conteúdo</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
-        ) : scripts.length === 0 ? (
-          <div className="text-center py-20">
-            <div className="w-16 h-16 bg-gray-800 rounded-2xl flex items-center justify-center mx-auto mb-6">
-              <FileText className="w-8 h-8 text-gray-400" />
+
+          {/* Recent Scripts Panel */}
+          <div className="bg-gray-900/50 backdrop-blur-xl rounded-2xl border border-gray-800 p-8">
+            <div className="mb-6">
+              <h2 className="text-2xl font-light text-white mb-2">Roteiros Recentes</h2>
+              <p className="text-gray-400 text-sm">Últimos roteiros gerados</p>
             </div>
-            <h3 className="text-xl font-light text-white mb-2">Nenhum roteiro encontrado</h3>
-            <p className="text-gray-400 mb-6">Gere alguns roteiros primeiro para vê-los aqui</p>
-            <button
-              onClick={() => onNavigate?.('generate')}
-              className="flex items-center space-x-2 px-6 py-3 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-medium transition-all duration-200 mx-auto"
-            >
-              <Wand2 className="w-5 h-5" />
-              <span>Gerar Roteiros</span>
-            </button>
+            
+            <div className="space-y-4 max-h-96 overflow-y-auto">
+              {generatedScripts.length === 0 ? (
+                <div className="text-center py-8">
+                  <FileText className="w-12 h-12 text-gray-600 mx-auto mb-4" />
+                  <p className="text-gray-400">Nenhum roteiro gerado ainda</p>
+                </div>
+              ) : (
+                generatedScripts.map((script) => (
+                  <GeneratedScriptCard
+                    key={script.id}
+                    script={script}
+                    onDeleteScript={deleteScript}
+                    onPlayAudio={playAudio}
+                    onPauseAudio={pauseAudio}
+                    onDownloadAudio={downloadAudio}
+                    onEditScript={openEditModal}
+                    isAudioPlaying={isAudioPlaying}
+                    downloadingAudios={downloadingAudios}
+                    deletingScripts={deletingScripts}
+                    getVoiceName={getVoiceName}
+                    formatDate={formatDate}
+                  />
+                ))
+              )}
+            </div>
           </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-            {scripts.map((script) => (
-              <GeneratedScriptCard
-                key={script.id}
-                script={script}
-                onDeleteScript={deleteScript}
-                onPlayAudio={playAudio}
-                onPauseAudio={pauseAudio}
-                onDownloadAudio={downloadAudio}
-                onEditScript={openEditModal}
-                isAudioPlaying={isAudioPlaying}
-                downloadingAudios={downloadingAudios}
-                deletingScripts={deletingScripts}
-                getVoiceName={getVoiceName}
-                formatDate={formatDate}
-              />
-            ))}
-          </div>
-        )}
+        </div>
       </div>
 
       {/* Edit Script Modal */}
@@ -526,7 +817,6 @@ const GeneratedScriptCard: React.FC<GeneratedScriptCardProps> = ({
   getVoiceName,
   formatDate
 }) => {
-  const [showFullScript, setShowFullScript] = useState(false);
   const audioId = `script-audio-${script.id}`;
   const isPlaying = isAudioPlaying(audioId);
   const isDownloading = downloadingAudios.has(script.id);
@@ -543,143 +833,86 @@ const GeneratedScriptCard: React.FC<GeneratedScriptCardProps> = ({
   };
 
   return (
-    <div className="bg-gray-900/50 backdrop-blur-xl rounded-2xl border border-gray-800 p-6 hover:border-gray-700 transition-all duration-300">
+    <div className="bg-gray-800/50 rounded-xl border border-gray-700 p-4 hover:border-gray-600 transition-all duration-200">
       {/* Header */}
-      <div className="flex items-start justify-between mb-4">
+      <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
-          <h3 className="text-lg font-medium text-white mb-1 line-clamp-2">
+          <h4 className="text-white font-medium text-sm line-clamp-1 mb-1">
             {script.titulo}
-          </h3>
-          <div className="flex items-center space-x-3 text-sm text-gray-400">
-            <div className="flex items-center space-x-1">
-              <Calendar className="w-4 h-4" />
-              <span>{formatDate(script.created_at)}</span>
-            </div>
-            <div className="flex items-center space-x-1">
-              <Hash className="w-4 h-4" />
-              <span>{script.id}</span>
-            </div>
+          </h4>
+          <div className="flex items-center space-x-2 text-xs text-gray-400">
+            <span>{script.nome_canal}</span>
+            <span>•</span>
+            <span>#{script.id}</span>
           </div>
         </div>
         
-        {/* Action Buttons */}
-        <div className="flex items-center space-x-2 ml-4">
-          {/* Audio Controls */}
+        <div className="flex items-center space-x-1 ml-2">
           {script.audio_path && (
-            <>
-              <button
-                onClick={handlePlayPause}
-                disabled={isDownloading}
-                className={`p-2 rounded-lg transition-all duration-200 ${
-                  isPlaying
-                    ? 'bg-red-600 hover:bg-red-700 text-white'
-                    : 'bg-green-600 hover:bg-green-700 text-white'
-                } disabled:opacity-50 disabled:cursor-not-allowed`}
-                title={isPlaying ? 'Pausar áudio' : 'Reproduzir áudio'}
-              >
-                {isPlaying ? (
-                  <Square className="w-4 h-4" />
-                ) : (
-                  <Play className="w-4 h-4" />
-                )}
-              </button>
-              
-              <button
-                onClick={() => onDownloadAudio(script)}
-                disabled={isDownloading || isPlaying}
-                className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                title="Baixar áudio"
-              >
-                {isDownloading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Download className="w-4 h-4" />
-                )}
-              </button>
-            </>
+            <button
+              onClick={handlePlayPause}
+              disabled={isDownloading}
+              className={`p-1.5 rounded-lg transition-all duration-200 ${
+                isPlaying
+                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                  : 'bg-green-600 hover:bg-green-700 text-white'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+              title={isPlaying ? 'Pausar áudio' : 'Reproduzir áudio'}
+            >
+              {isPlaying ? (
+                <Square className="w-3 h-3" />
+              ) : (
+                <Play className="w-3 h-3" />
+              )}
+            </button>
           )}
           
-          {/* Edit Button */}
           <button
             onClick={() => onEditScript(script)}
-            className="p-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all duration-200"
+            className="p-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all duration-200"
             title="Editar roteiro"
           >
-            <Edit3 className="w-4 h-4" />
+            <Edit3 className="w-3 h-3" />
           </button>
           
-          {/* Delete Button */}
           <button
             onClick={() => onDeleteScript(script.id)}
             disabled={isDeleting}
-            className="p-2 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="p-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
             title="Excluir roteiro"
           >
             {isDeleting ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
+              <Loader2 className="w-3 h-3 animate-spin" />
             ) : (
-              <Trash2 className="w-4 h-4" />
+              <Trash2 className="w-3 h-3" />
             )}
           </button>
         </div>
       </div>
 
-      {/* Channel and Voice Info */}
-      <div className="mb-4 space-y-2">
-        <div className="flex items-center space-x-2 text-sm">
-          <span className="text-gray-400">Canal:</span>
-          <span className="text-white font-medium">{script.nome_canal}</span>
-        </div>
-        {script.voice_id && (
-          <div className="flex items-center space-x-2 text-sm">
-            <span className="text-gray-400">Voz:</span>
-            <span className="text-white">{getVoiceName(script.voice_id)}</span>
-          </div>
-        )}
-      </div>
-
-      {/* Script Preview */}
-      <div className="mb-4">
-        <div className="bg-black/30 rounded-lg p-4 border border-gray-700">
-          <p className={`text-gray-300 text-sm leading-relaxed ${
-            showFullScript ? '' : 'line-clamp-4'
-          }`}>
-            {script.roteiro}
-          </p>
-          {script.roteiro.length > 200 && (
-            <button
-              onClick={() => setShowFullScript(!showFullScript)}
-              className="mt-2 text-blue-400 hover:text-blue-300 text-sm font-medium transition-colors"
-            >
-              {showFullScript ? 'Ver menos' : 'Ver mais'}
-            </button>
-          )}
-        </div>
-      </div>
+      {/* Content Preview */}
+      <p className="text-gray-300 text-xs line-clamp-2 mb-3">
+        {script.roteiro}
+      </p>
 
       {/* Footer */}
-      <div className="flex items-center justify-between text-xs text-gray-400">
-        <div className="flex items-center space-x-4">
-          <span>{script.roteiro.length.toLocaleString()} caracteres</span>
+      <div className="flex items-center justify-between text-xs text-gray-500">
+        <div className="flex items-center space-x-2">
+          <span>{script.roteiro.length} chars</span>
           {script.audio_path && (
-            <div className="flex items-center space-x-1 text-green-400">
-              <Volume2 className="w-3 h-3" />
-              <span>Com áudio</span>
-            </div>
+            <>
+              <span>•</span>
+              <div className="flex items-center space-x-1 text-green-400">
+                <Volume2 className="w-3 h-3" />
+                <span>Áudio</span>
+              </div>
+            </>
           )}
         </div>
-        
-        {/* View Details Button */}
-        <button
-          onClick={() => setShowFullScript(!showFullScript)}
-          className="flex items-center space-x-1 text-gray-400 hover:text-white transition-colors"
-        >
-          <Eye className="w-3 h-3" />
-          <span>Detalhes</span>
-        </button>
+        <span>{formatDate(script.created_at)}</span>
       </div>
     </div>
   );
 };
 
-export default ScriptListPage;
+export default ScriptGenerationPage;

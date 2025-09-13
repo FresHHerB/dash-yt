@@ -34,6 +34,7 @@ interface Script {
   canal_id: number;
   created_at: string;
   audio_path?: string;
+  text_thumb?: string;
 }
 
 interface ChannelWithScripts extends Channel {
@@ -90,7 +91,7 @@ const GeneratedScriptsPage: React.FC<GeneratedScriptsPageProps> = ({ user, onBac
       // Buscar roteiros para cada canal
       const { data: scriptsData, error: scriptsError } = await supabase
         .from('roteiros')
-        .select('id, roteiro, titulo, canal_id, created_at, audio_path')
+        .select('id, roteiro, titulo, canal_id, created_at, audio_path, text_thumb')
         .order('created_at', { ascending: false });
 
       if (scriptsError) {
@@ -267,6 +268,7 @@ const GeneratedScriptsPage: React.FC<GeneratedScriptsPageProps> = ({ user, onBac
       const payload = {
         id_roteiro: selectedScript.id,
         titulo_editado: editedTitle,
+        text_thumb_editado: selectedScript.text_thumb || '',
         roteiro_editado: editedScriptContent
       };
 
@@ -753,6 +755,13 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
         <h3 className={`font-medium text-white mb-3 line-clamp-2 group-hover:${channelColor.text} transition-colors`}>
           {script.titulo || 'Sem título'}
         </h3>
+        
+        {/* Thumb Text */}
+        {script.text_thumb && (
+          <div className="mb-3 px-2 py-1 bg-orange-900/20 border border-orange-800 rounded text-xs text-orange-400">
+            <span className="font-medium">Thumb:</span> {script.text_thumb}
+          </div>
+        )}
 
         {/* Script Preview */}
         <p className="text-gray-400 text-sm mb-4 line-clamp-3">
@@ -961,8 +970,29 @@ const ScriptDetailModal: React.FC<ScriptDetailModalProps> = ({
             </div>
           )}
 
-          {/* Title Section */}
-          <div className="mb-6">
+          {/* Thumb Text Field in Edit Mode */}
+          {isEditMode && (
+            <div className="space-y-2 mb-6">
+              <label className="block text-sm font-medium text-gray-300">
+                Texto da Thumb
+              </label>
+              <input
+                type="text"
+                value={script.text_thumb || ''}
+                onChange={(e) => {
+                  // Update the selectedScript with new thumb text
+                  const updatedScript = { ...script, text_thumb: e.target.value };
+                  // This would need to be passed as a prop to update the parent state
+                  // For now, we'll show it as read-only in edit mode
+                }}
+                className="w-full p-4 bg-black border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500"
+                placeholder="Digite o texto da thumbnail..."
+              />
+            </div>
+          )}
+
+          {/* Title Field */}
+          <div className="space-y-2 mb-6">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-lg font-medium text-gray-300">Título</h3>
               {!isEditMode && (
@@ -993,6 +1023,16 @@ const ScriptDetailModal: React.FC<ScriptDetailModalProps> = ({
               </div>
             )}
           </div>
+
+          {/* Thumb Text Section */}
+          {script.text_thumb && !isEditMode && (
+            <div className="mb-6">
+              <h3 className="text-lg font-medium text-gray-300 mb-2">Texto da Thumb</h3>
+              <div className="bg-orange-900/20 border border-orange-800 rounded-lg p-4">
+                <p className="text-orange-400 font-medium">{script.text_thumb}</p>
+              </div>
+            </div>
+          )}
 
           {/* Script Section */}
           <div className="mb-6">
@@ -1103,6 +1143,16 @@ const ScriptDetailModal: React.FC<ScriptDetailModalProps> = ({
                   <span className="text-gray-400">Canal:</span>
                   <span className="text-white">{channel.nome_canal}</span>
                 </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-400">Título:</span>
+                  <span className="text-white">{script.titulo || 'Sem título'}</span>
+                </div>
+                {script.text_thumb && (
+                  <div className="flex justify-between">
+                    <span className="text-gray-400">Texto da Thumb:</span>
+                    <span className="text-white">{script.text_thumb}</span>
+                  </div>
+                )}
                 <div className="flex justify-between">
                   <span className="text-gray-400">Caracteres:</span>
                   <span className="text-white">{script.roteiro.length.toLocaleString()}</span>

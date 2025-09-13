@@ -81,6 +81,7 @@ interface GeneratedScript {
   titulo: string;
   roteiro: string;
   id_roteiro: string;
+  text_thumb?: string;
   audio_path: string;
 }
 
@@ -89,6 +90,7 @@ interface GeneratedAudioScript {
   roteiro: string;
   canal_id: number;
   titulo: string;
+  text_thumb?: string;
   audio_path: string;
 }
 
@@ -657,6 +659,7 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
               roteiro: item.roteiro || '',
               canal_id: item.canal_id || selectedChannelId || 0,
               titulo: item.titulo || 'Título não disponível',
+              text_thumb: item.text_thumb || '',
               audio_path: item.audio_path || ''
             };
           });
@@ -692,7 +695,8 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
           return {
             titulo: item.titulo || 'Título não disponível',
             roteiro: item.roteiro || '',
-            id_roteiro: item.id_roteiro || `${Date.now()}-${index}`,
+            id_roteiro: item.id_roteiro?.toString() || `temp-${index}`,
+            text_thumb: item.text_thumb || '',
             audio_path: item.audio_path || ''
           };
         });
@@ -1451,6 +1455,7 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
                                 titulo: audioScript.titulo,
                                 roteiro: audioScript.roteiro,
                                 id_roteiro: audioScript.id_roteiro.toString(),
+                                text_thumb: audioScript.text_thumb,
                                 audio_path: audioScript.audio_path
                               };
                               setSelectedScriptModal(scriptForModal);
@@ -1465,6 +1470,12 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
                       <h3 className="text-white font-medium mb-2 line-clamp-2 text-sm">
                         {audioScript.titulo}
                       </h3>
+                      
+                      {audioScript.text_thumb && (
+                        <div className="mb-2 px-2 py-1 bg-orange-900/20 border border-orange-800 rounded text-xs text-orange-400">
+                          <span className="font-medium">Thumb:</span> {audioScript.text_thumb}
+                        </div>
+                      )}
                       
                       <p className="text-gray-300 text-sm line-clamp-3 mb-3">
                         {audioScript.roteiro.substring(0, 150)}
@@ -1556,6 +1567,12 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
                       <h3 className="text-white font-medium mb-2 line-clamp-2 text-sm">
                         {script.titulo}
                       </h3>
+                      
+                      {script.text_thumb && (
+                        <div className="mb-2 px-2 py-1 bg-orange-900/20 border border-orange-800 rounded text-xs text-orange-400">
+                          <span className="font-medium">Thumb:</span> {script.text_thumb}
+                        </div>
+                      )}
                       
                       <p className="text-gray-300 text-sm line-clamp-3 mb-3">
                         {script.roteiro.substring(0, 150)}
@@ -1907,6 +1924,18 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
                   )}
                 </div>
 
+                {/* Thumb Text Section */}
+                {selectedScriptModal.text_thumb && (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-300">
+                      Texto da Thumb
+                    </label>
+                    <div className="bg-orange-900/20 border border-orange-800 rounded-lg p-4">
+                      <p className="text-orange-400 font-medium">{selectedScriptModal.text_thumb}</p>
+                    </div>
+                  </div>
+                )}
+
                 {/* Script Content */}
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-gray-300">
@@ -1988,6 +2017,35 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
                       >
                         Seu navegador não suporta o elemento de áudio.
                       </audio>
+                    </div>
+                  </div>
+                )}
+
+                {/* Script Info Section */}
+                {!isEditMode && (
+                  <div className="bg-gray-800/30 rounded-xl p-4">
+                    <h4 className="text-white font-medium mb-3">Informações do Roteiro</h4>
+                    <div className="space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Título:</span>
+                        <span className="text-white">{selectedScriptModal.titulo || 'Sem título'}</span>
+                      </div>
+                      {selectedScriptModal.text_thumb && (
+                        <div className="flex justify-between">
+                          <span className="text-gray-400">Texto da Thumb:</span>
+                          <span className="text-white">{selectedScriptModal.text_thumb}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Caracteres:</span>
+                        <span className="text-white">{selectedScriptModal.roteiro.length.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-400">Áudio:</span>
+                        <span className={selectedScriptModal.audio_path ? 'text-green-400' : 'text-gray-400'}>
+                          {selectedScriptModal.audio_path ? 'Disponível' : 'Não disponível'}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 )}

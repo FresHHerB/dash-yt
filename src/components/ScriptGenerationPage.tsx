@@ -487,24 +487,35 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
       const response = await fetch(buildWebhookUrl(selectedWebhookOption.endpoint), {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+            hasAudio: generationType === 'scriptAndAudio' && !!item.audio_url,
         },
         body: JSON.stringify(payload),
-      });
-
-      console.log('📡 Response status:', response.status);
-      console.log('📡 Response headers:', Object.fromEntries(response.headers.entries()));
-
-      if (response.ok) {
-        const result = await response.json();
-        console.log('✅ Conteúdo gerado:', result);
+          };
+        });
+        let responseArray: any[] = [];
         
-        // Processar lista de roteiros gerados
-        if (Array.isArray(result) && result.length > 0) {
-          setGeneratedScripts(result);
-          setMessage({ type: 'success', text: `${result.length} roteiro${result.length > 1 ? 's' : ''} ${selectedWebhookOption.id === 'script' ? 'gerado' : 'gerado com áudio'}${result.length > 1 ? 's' : ''} com sucesso!` });
+        console.log('📦 Quantidade de scripts processados:', processedScripts.length);
+        // Garantir que temos um array para processar
+        if (Array.isArray(result)) {
+          responseArray = result;
+        } else if (result && typeof result === 'object') {
+          // Se for um objeto único, transformar em array
+          responseArray = [result];
         } else {
-          throw new Error('Nenhum roteiro foi gerado');
+          throw new Error('Formato de resposta inesperado');
+        }
+            successMessage = count === 1 ? 'Roteiro gerado com sucesso!' : `${count} roteiros gerados com sucesso!`;
+        console.log('📦 Array para processar:', responseArray);
+            successMessage = count === 1 ? 'Roteiro e áudio gerados com sucesso!' : `${count} roteiros e áudios gerados com sucesso!`;
+        
+            successMessage = count === 1 ? 'Áudio gerado com sucesso!' : `${count} áudios gerados com sucesso!`;
+        processedScripts = responseArray.map((item: any, index: number) => {
+          console.log(`🔍 Processando item ${index + 1}:`, item);
+          
+          console.log('✅ Mensagem de sucesso definida:', successMessage);
+          console.log('✅ Estado generatedScripts atualizado com', processedScripts.length, 'itens');
+          return {
+          console.log('❌ Nenhum script foi processado');
         }
         setScriptIdeas(['']);
       } else {

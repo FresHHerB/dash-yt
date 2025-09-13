@@ -286,20 +286,8 @@ const GeneratedScriptsPage: React.FC<GeneratedScriptsPageProps> = ({ user, onBac
         const result = await response.json();
         console.log('✅ Conteúdo atualizado com sucesso:', result);
         
-        // Atualizar o script na lista local
-        setChannelsWithScripts(prev => prev.map(channel => ({
-          ...channel,
-          scripts: channel.scripts.map(script => 
-            script.id === selectedScript.id 
-              ? { ...script, titulo: editedTitle, roteiro: editedScriptContent }
-              : script
-          )
-        })));
-        
-        // Atualizar também o script selecionado se estiver aberto
-        if (selectedScript && selectedScript.id === selectedScript.id) {
-          setSelectedScript({ ...selectedScript, titulo: editedTitle, roteiro: editedScriptContent });
-        }
+        // Recarregar dados da tabela ao invés de atualizar localmente
+        await loadChannelsWithScripts();
         
         setEditModalMessage({ type: 'success', text: 'Conteúdo atualizado com sucesso!' });
         
@@ -307,6 +295,8 @@ const GeneratedScriptsPage: React.FC<GeneratedScriptsPageProps> = ({ user, onBac
         setTimeout(() => {
           setIsEditMode(false);
           setEditModalMessage(null);
+          // Fechar modal após atualização bem-sucedida
+          closeModal();
         }, 2000);
       } else {
         throw new Error(`Erro ${response.status}: ${response.statusText}`);

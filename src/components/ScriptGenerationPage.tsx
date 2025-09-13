@@ -496,12 +496,8 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
         const result = await response.json();
         console.log('📥 Resposta recebida:', result);
         
-        let responseArray: any[] = [];
-        let processedScripts: GeneratedScript[] = [];
-        let successMessage = '';
-        
-        console.log('📦 Quantidade de scripts processados:', processedScripts.length);
         // Garantir que temos um array para processar
+        let responseArray: any[] = [];
         if (Array.isArray(result)) {
           responseArray = result;
         } else if (result && typeof result === 'object') {
@@ -512,24 +508,17 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
         }
 
         console.log('📦 Array para processar:', responseArray);
+        console.log('📊 Quantidade total de itens:', responseArray.length);
         
-        processedScripts = responseArray.map((item: any, index: number) => {
-          console.log(`🔍 Processando item ${index + 1}:`, item);
+        // Processar todos os scripts recebidos
+        const processedScripts: GeneratedScript[] = responseArray.map((item: any, index: number) => {
+          console.log(`🔍 Processando item ${index + 1}/${responseArray.length}:`, {
+            titulo: item.titulo ? item.titulo.substring(0, 50) + '...' : 'Sem título',
+            roteiro_length: item.roteiro ? item.roteiro.length : 0,
+            id_roteiro: item.id_roteiro,
+            audio_path: item.audio_path ? 'Presente' : 'Ausente'
+          });
           
-          const generationType = selectedWebhookMode;
-          const count = responseArray.length;
-          
-          if (generationType === 'script') {
-            successMessage = count === 1 ? 'Roteiro gerado com sucesso!' : `${count} roteiros gerados com sucesso!`;
-          } else if (generationType === 'script-audio') {
-            successMessage = count === 1 ? 'Roteiro e áudio gerados com sucesso!' : `${count} roteiros e áudios gerados com sucesso!`;
-          } else if (generationType === 'audio') {
-            successMessage = count === 1 ? 'Áudio gerado com sucesso!' : `${count} áudios gerados com sucesso!`;
-          }
-          
-          console.log('✅ Mensagem de sucesso definida:', successMessage);
-          console.log('✅ Estado generatedScripts atualizado com', processedScripts.length, 'itens');
-          console.log('❌ Nenhum script foi processado');
           return {
             titulo: item.titulo || 'Título não disponível',
             roteiro: item.roteiro || '',
@@ -538,11 +527,31 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
           };
         });
 
+        console.log('✅ Scripts processados:', processedScripts.length);
+        
+        // Definir mensagem de sucesso baseada na quantidade e tipo
+        const generationType = selectedWebhookMode;
+        const count = processedScripts.length;
+        let successMessage = '';
+        
+        if (generationType === 'script') {
+          successMessage = count === 1 ? 'Roteiro gerado com sucesso!' : `${count} roteiros gerados com sucesso!`;
+        } else if (generationType === 'script-audio') {
+          successMessage = count === 1 ? 'Roteiro e áudio gerados com sucesso!' : `${count} roteiros e áudios gerados com sucesso!`;
+        } else if (generationType === 'audio') {
+          successMessage = count === 1 ? 'Áudio gerado com sucesso!' : `${count} áudios gerados com sucesso!`;
+        }
+
         if (processedScripts.length > 0) {
           setGeneratedScripts(processedScripts);
           setMessage({ type: 'success', text: successMessage });
+          console.log('✅ Estado atualizado com', processedScripts.length, 'scripts');
         } else {
+          console.log('❌ Nenhum script foi processado');
+          setMessage({ type: 'error', text: 'Nenhum roteiro foi gerado.' });
         }
+        
+        // Limpar ideias para próxima geração
         setScriptIdeas(['']);
       } else {
         throw new Error(`Erro ${response.status}: ${response.statusText}`);

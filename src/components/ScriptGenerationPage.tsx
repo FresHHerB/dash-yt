@@ -490,7 +490,6 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
             hasAudio: generationType === 'scriptAndAudio' && !!item.audio_url,
         },
         body: JSON.stringify(payload),
-          };
         });
         let responseArray: any[] = [];
         

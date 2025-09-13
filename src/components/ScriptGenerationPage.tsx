@@ -430,17 +430,19 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
       setMessage({ type: 'error', text: 'Selecione um canal, digite pelo menos uma ideia para o roteiro, especifique o idioma e escolha um modelo.' });
       return;
     }
-
-    // Validação específica para webhooks que requerem voz
-    if (selectedWebhookOption.requiresVoice && !selectedVoiceId) {
-      setMessage({ type: 'error', text: 'Para esta opção, é necessário selecionar uma voz.' });
-      return;
-    }
-
+    
     const selectedChannel = channels.find(c => c.id === selectedChannelId);
     const selectedVoice = selectedVoiceId ? voices.find(v => v.id === selectedVoiceId) : null;
-    const validIdeas = ideas.filter(idea => idea.trim() !== '');
-    if (validIdeas.length === 0) {
+    
+    // Filter valid ideas (non-empty)
+    const ideas = scriptIdeas.filter(idea => idea.trim() !== '');
+    console.log('💡 [GENERATION] Ideias válidas:', ideas);
+    
+    if (ideas.length === 0) {
+      setMessage({ type: 'error', text: 'Por favor, adicione pelo menos uma ideia.' });
+      return;
+    }
+    
     if (!selectedChannel) {
       setMessage({ type: 'error', text: 'Canal selecionado não encontrado.' });
       return;
@@ -462,8 +464,7 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
       const basePayload = {
         id_canal: selectedChannelId,
         nome_canal: selectedChannel.nome_canal,
-        nova_ideia: validIdeas,
-        nova_ideia: validIdeas,
+        nova_ideia: ideas,
         modelo: selectedModel
       };
 
@@ -506,7 +507,8 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
           setMessage({ type: 'success', text: `${result.length} roteiro${result.length > 1 ? 's' : ''} ${selectedWebhookOption.id === 'script' ? 'gerado' : 'gerado com áudio'}${result.length > 1 ? 's' : ''} com sucesso!` });
         } else {
           throw new Error('Nenhum roteiro foi gerado');
-        setIdeas(['']);
+        }
+        setScriptIdeas(['']);
       } else {
         throw new Error(`Erro ${response.status}: ${response.statusText}`);
       }
@@ -734,7 +736,7 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
                   {webhookOptions.map((option) => {
                     const IconComponent = option.icon;
                     const isSelected = selectedWebhookMode === option.id;
-                        placeholder={`Ideia ${index + 1} (ex: "Como fazer um bolo de chocolate")`}
+                    const isDisabled = option.id === 'audio'; // Temporariamente desabilitado
                     
                     return (
                       <button
@@ -749,16 +751,6 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
                             ? 'bg-gray-800/30 border-gray-700 text-gray-500 cursor-not-allowed opacity-50'
                             : 'bg-gray-800/50 border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800/70'
                           }
-              
-              {/* Debug info - remover em produção */}
-              {process.env.NODE_ENV === 'development' && (
-                <div className="mt-4 p-3 bg-gray-800/50 border border-gray-700 rounded-lg">
-                  <p className="text-xs text-gray-400 mb-2">Debug - Ideias válidas:</p>
-                  <pre className="text-xs text-gray-300">
-                    {JSON.stringify(ideas.filter(idea => idea.trim() !== ''), null, 2)}
-                  </pre>
-                </div>
-              )}
                         `}
                       >
                         <div className="flex items-start space-x-3">
@@ -841,20 +833,12 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
                   ))}
                   
                   {/* Botão para adicionar nova ideia */}
-                  <span className="text-sm text-gray-400">
-                    {ideas.filter(idea => idea.trim() !== '').length} de {ideas.length} ideias
-                  </span>
                   <button
                     onClick={addScriptIdea}
-                    disabled={ideas.length >= 10}
-                    className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-all duration-200 ${
-                      ideas.length >= 10 
-                        ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-                        : 'bg-blue-600 hover:bg-blue-700 text-white'
-                    }`}
+                    className="flex items-center space-x-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg transition-all duration-200 border border-gray-600 hover:border-gray-500"
                   >
                     <Plus className="w-4 h-4" />
-                    <span>{ideas.length >= 10 ? 'Máximo atingido' : 'Adicionar'}</span>
+                    <span>Adicionar nova ideia</span>
                   </button>
                 </div>
               </div>

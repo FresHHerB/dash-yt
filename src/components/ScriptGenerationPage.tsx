@@ -84,6 +84,14 @@ interface GeneratedScript {
   audio_path: string;
 }
 
+interface GeneratedAudioScript {
+  id_roteiro: number;
+  roteiro: string;
+  canal_id: number;
+  titulo: string;
+  audio_path: string;
+}
+
 interface SavedScriptForAudio {
   id: number;
   roteiro: string;
@@ -111,6 +119,7 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
   
   // Estados para roteiros gerados (lista)
   const [generatedScripts, setGeneratedScripts] = useState<GeneratedScript[]>([]);
+  const [generatedAudioScripts, setGeneratedAudioScripts] = useState<GeneratedAudioScript[]>([]);
   const [selectedScriptModal, setSelectedScriptModal] = useState<GeneratedScript | null>(null);
   
   const [isLoadingChannels, setIsLoadingChannels] = useState(true);
@@ -558,7 +567,8 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
     setIsGeneratingContent(true);
     setMessage(null);
     setGeneratedScripts([]); // Limpar roteiros anteriores
-
+    setGeneratedAudioScripts([]); // Limpar áudios anteriores
+    
     try {
       console.log('🚀 Iniciando geração de conteúdo...');
       
@@ -630,6 +640,45 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
 
         console.log('📦 Array para processar:', responseArray);
         console.log('📊 Quantidade total de itens:', responseArray.length);
+        
+        // Tratamento específico para "Gerar Áudio"
+        if (selectedWebhookMode === 'audio') {
+          const processedAudioScripts: GeneratedAudioScript[] = responseArray.map((item: any, index: number) => {
+            console.log(`🔍 Processando áudio ${index + 1}/${responseArray.length}:`, {
+              id_roteiro: item.id_roteiro,
+              titulo: item.titulo ? item.titulo.substring(0, 50) + '...' : 'Sem título',
+              roteiro_length: item.roteiro ? item.roteiro.length : 0,
+              canal_id: item.canal_id,
+              audio_path: item.audio_path ? 'Presente' : 'Ausente'
+            });
+            
+            return {
+              id_roteiro: item.id_roteiro || 0,
+              roteiro: item.roteiro || '',
+              canal_id: item.canal_id || selectedChannelId || 0,
+              titulo: item.titulo || 'Título não disponível',
+              audio_path: item.audio_path || ''
+            };
+          });
+
+          console.log('✅ Áudios processados:', processedAudioScripts.length);
+          
+          const count = processedAudioScripts.length;
+          const successMessage = count === 1 ? 'Áudio gerado com sucesso!' : `${count} áudios gerados com sucesso!`;
+
+          if (processedAudioScripts.length > 0) {
+            setGeneratedAudioScripts(processedAudioScripts);
+            setMessage({ type: 'success', text: successMessage });
+            console.log('✅ Estado de áudios atualizado com', processedAudioScripts.length, 'áudios');
+          } else {
+            console.log('❌ Nenhum áudio foi processado');
+            setMessage({ type: 'error', text: 'Nenhum áudio foi gerado.' });
+          }
+          
+          // Limpar roteiros selecionados para próxima geração
+          setSelectedScriptsForAudio([]);
+          return; // Sair da função para não processar como roteiros normais
+        }
         
         // Processar todos os scripts recebidos
         const processedScripts: GeneratedScript[] = responseArray.map((item: any, index: number) => {
@@ -1330,6 +1379,114 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
           </div>
 
           {/* Generated Scripts Display */}
+          {generatedAudioScripts.length > 0 && (
+            <div className="bg-gray-900/50 backdrop-blur-xl rounded-2xl border border-gray-800 p-8">
+              <div className="mb-6 flex items-center justify-between">
+                <div>
+                  <h2 className="text-2xl font-light text-white mb-2">Áudios Gerados</h2>
+                  <p className="text-gray-400 text-sm">
+                    {generatedAudioScripts.length} áudio{generatedAudioScripts.length > 1 ? 's' : ''} criado{generatedAudioScripts.length > 1 ? 's' : ''} com sucesso
+                  </p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {generatedAudioScripts.map((audioScript, index) => {
+                  const color = getCardColor(index);
+                  const audioId = `generated-audio-${audioScript.id_roteiro}`;
+                  
+                  return (
+                    <div 
+                      key={audioScript.id_roteiro}
+                      className={`border-l-4 ${color.border} bg-gray-800/30 rounded-r-xl p-4 hover:bg-gray-800/50 transition-all duration-200 group`}
+                    >
+                      <div className="flex items-start justify-between mb-3">
+                        <div className="flex items-center space-x-2">
+                          <div className={`w-3 h-3 ${color.bg} rounded-full`}></div>
+                          <span className="text-xs text-gray-400">Roteiro #{audioScript.id_roteiro}</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          {audioScript.audio_path && (
+                            <>
+                              <button
+                                onClick={() => {
+                                  if (isAudioPlaying(audioId)) {
+                                    pauseAudio();
+                                  } else {
+                                    playAudio(audioScript.audio_path, audioId);
+                                  }
+                                }}
+                                className={`p-1.5 rounded-md transition-all duration-200 ${
+                                  isAudioPlaying(audioId)
+                                    ? 'bg-red-600 hover:bg-red-700 text-white'
+                                    : 'bg-green-600 hover:bg-green-700 text-white'
+                                }`}
+                              >
+                                {isAudioPlaying(audioId) ? (
+                                  <Square className="w-3 h-3" />
+                                ) : (
+                                  <Play className="w-3 h-3" />
+                                )}
+                              </button>
+                              <button
+                                onClick={() => {
+                                  const a = document.createElement('a');
+                                  a.href = audioScript.audio_path;
+                                  a.download = `roteiro-${audioScript.id_roteiro}-audio.mp3`;
+                                  a.target = '_blank';
+                                  document.body.appendChild(a);
+                                  a.click();
+                                  document.body.removeChild(a);
+                                }}
+                                className="p-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition-all duration-200"
+                              >
+                                <Download className="w-3 h-3" />
+                              </button>
+                            </>
+                          )}
+                          <button
+                            onClick={() => {
+                              // Converter GeneratedAudioScript para GeneratedScript para o modal
+                              const scriptForModal: GeneratedScript = {
+                                titulo: audioScript.titulo,
+                                roteiro: audioScript.roteiro,
+                                id_roteiro: audioScript.id_roteiro.toString(),
+                                audio_path: audioScript.audio_path
+                              };
+                              setSelectedScriptModal(scriptForModal);
+                            }}
+                            className="p-1.5 text-gray-400 hover:text-white hover:bg-gray-700 rounded-md transition-all duration-200"
+                          >
+                            <Eye className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                      
+                      <h3 className="text-white font-medium mb-2 line-clamp-2 text-sm">
+                        {audioScript.titulo}
+                      </h3>
+                      
+                      <p className="text-gray-300 text-sm line-clamp-3 mb-3">
+                        {audioScript.roteiro.substring(0, 150)}
+                        {audioScript.roteiro.length > 150 && '...'}
+                      </p>
+                      
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-gray-500">
+                          {audioScript.roteiro.length} caracteres
+                        </span>
+                        <div className="flex items-center space-x-1 text-xs text-green-400">
+                          <Volume2 className="w-3 h-3" />
+                          <span>Com áudio</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {generatedScripts.length > 0 && (
             <div className="bg-gray-900/50 backdrop-blur-xl rounded-2xl border border-gray-800 p-8">
               <div className="mb-6 flex items-center justify-between">

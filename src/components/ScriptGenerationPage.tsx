@@ -84,6 +84,13 @@ interface GeneratedScript {
   audio_path: string;
 }
 
+interface SavedScriptForAudio {
+  id: number;
+  roteiro: string;
+  titulo: string;
+  created_at: string;
+}
+
 interface ChannelWithScripts {
   id: number;
   nome_canal: string;
@@ -116,6 +123,12 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
   const [isLoadingScripts, setIsLoadingScripts] = useState(false);
   const [isDeletingScript, setIsDeletingScript] = useState<number | null>(null);
   const [playingAudio, setPlayingAudio] = useState<{ id: string; audio: HTMLAudioElement } | null>(null);
+
+  // Estados específicos para "Gerar Áudio"
+  const [selectedScriptsForAudio, setSelectedScriptsForAudio] = useState<SavedScriptForAudio[]>([]);
+  const [showLoadScriptsModal, setShowLoadScriptsModal] = useState(false);
+  const [availableScriptsForChannel, setAvailableScriptsForChannel] = useState<SavedScriptForAudio[]>([]);
+  const [isLoadingChannelScripts, setIsLoadingChannelScripts] = useState(false);
 
   // Estados para edição no modal
   const [isEditMode, setIsEditMode] = useState(false);
@@ -150,7 +163,7 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
     {
       id: 'audio',
       title: 'Gerar Áudio',
-      description: 'Função será definida posteriormente',
+      description: 'Gera áudio para roteiros existentes',
       icon: Music,
       endpoint: 'generateAudio',
       color: 'from-purple-500 to-purple-600',
@@ -197,11 +210,21 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
         // Se canal não tem voz preferida, selecionar primeira voz disponível
         setSelectedVoiceId(voices.length > 0 ? voices[0].id : null);
       }
+      
+      // Limpar roteiros selecionados quando canal muda
+      if (selectedWebhookMode === 'audio') {
+        setSelectedScriptsForAudio([]);
+      }
     } else if (voices.length > 0 && !selectedVoiceId) {
       // Se não há canal selecionado mas há vozes, selecionar primeira voz
       setSelectedVoiceId(voices[0].id);
     }
   }, [selectedChannelId, channels, voices]);
+
+  // Effect para limpar roteiros selecionados quando modo webhook muda
+  useEffect(() => {
+    setSelectedScriptsForAudio([]);
+  }, [selectedWebhookMode]);
 
   const loadVoices = async () => {
     setIsLoadingVoices(true);
@@ -384,6 +407,69 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
       });
   };
 
+  // Funções específicas para "Gerar Áudio"
+  const loadChannelScripts = async () => {
+    if (!selectedChannelId) return;
+    
+    setIsLoadingChannelScripts(true);
+    try {
+      const { data, error } = await supabase
+        .from('roteiros')
+        .select('id, roteiro, titulo, created_at')
+        .eq('canal_id', selectedChannelId)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Erro ao carregar roteiros do canal:', error);
+        setMessage({ type: 'error', text: 'Erro ao carregar roteiros do canal.' });
+        return;
+      }
+
+      setAvailableScriptsForChannel(data || []);
+    } catch (err) {
+      console.error('Erro ao carregar roteiros do canal:', err);
+      setMessage({ type: 'error', text: 'Erro de conexão ao carregar roteiros.' });
+    } finally {
+      setIsLoadingChannelScripts(false);
+    }
+  };
+
+  const openLoadScriptsModal = () => {
+    if (!selectedChannelId) {
+      setMessage({ type: 'error', text: 'Selecione um canal primeiro.' });
+      return;
+    }
+    setShowLoadScriptsModal(true);
+    loadChannelScripts();
+  };
+
+  const closeLoadScriptsModal = () => {
+    setShowLoadScriptsModal(false);
+    setAvailableScriptsForChannel([]);
+  };
+
+  const addScriptForAudio = (script: SavedScriptForAudio) => {
+    // Verificar se o roteiro já foi adicionado
+    const isAlreadyAdded = selectedScriptsForAudio.some(s => s.id === script.id);
+    if (isAlreadyAdded) {
+      setMessage({ type: 'error', text: 'Este roteiro já foi adicionado.' });
+      return;
+    }
+
+    setSelectedScriptsForAudio(prev => [...prev, script]);
+    setMessage({ type: 'success', text: 'Roteiro adicionado com sucesso!' });
+  };
+
+  const removeScriptForAudio = (scriptId: number) => {
+    setSelectedScriptsForAudio(prev => prev.filter(s => s.id !== scriptId));
+  };
+
+  const clearAllScriptsForAudio = () => {
+    setSelectedScriptsForAudio([]);
+  };
+
+  // Fim das funções específicas para "Gerar Áudio"
+
   const loadChannels = async () => {
     setIsLoadingChannels(true);
     try {
@@ -433,12 +519,21 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
 
   const generateContent = async () => {
     // Filtrar ideias não vazias
-    const validIdeas = scriptIdeas.filter(idea => idea.trim());
+    const validIdeas = selectedWebhookMode !== 'audio' ? scriptIdeas.filter(idea => idea.trim()) : [];
     
     // Validação básica
-    if (!selectedChannelId || validIdeas.length === 0 || !language.trim() || !selectedModel.trim()) {
+    if (selectedWebhookMode !== 'audio' && (!selectedChannelId || validIdeas.length === 0 || !language.trim() || !selectedModel.trim())) {
       setMessage({ type: 'error', text: 'Selecione um canal, digite pelo menos uma ideia para o roteiro, especifique o idioma e escolha um modelo.' });
       return;
+    }
+
+    // Validação específica para "Gerar Áudio"
+    if (selectedWebhookMode === 'audio') {
+      if (selectedScriptsForAudio.length === 0) {
+        setMessage({ type: 'error', text: 'Selecione pelo menos um roteiro para gerar áudio.' });
+        return;
+      }
+      // Para áudio, não precisamos validar ideias, idioma e modelo
     }
 
     // Validação específica para webhooks que requerem voz
@@ -450,7 +545,7 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
     const selectedChannel = channels.find(c => c.id === selectedChannelId);
     const selectedVoice = selectedVoiceId ? voices.find(v => v.id === selectedVoiceId) : null;
     
-    if (!selectedChannel) {
+    if (!selectedChannel && selectedWebhookMode !== 'audio') {
       setMessage({ type: 'error', text: 'Canal selecionado não encontrado.' });
       return;
     }
@@ -467,29 +562,44 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
     try {
       console.log('🚀 Iniciando geração de conteúdo...');
       
-      // Payload base para todos os webhooks
-      const basePayload = {
-        id_canal: selectedChannelId,
-        nome_canal: selectedChannel.nome_canal,
-        nova_ideia: validIdeas,
-        idioma: language,
-        modelo: selectedModel
-      };
+      let payload: any;
 
-      // Adicionar dados de voz apenas se necessário
-      const payload = selectedWebhookOption.requiresVoice && selectedVoice 
-        ? {
-            ...basePayload,
-            voiceId: selectedVoice.voice_id,
-            plataforma: selectedVoice.plataforma,
-            velocidade: audioSpeed
-          }
-        : basePayload;
+      if (selectedWebhookMode === 'audio') {
+        // Payload específico para "Gerar Áudio"
+        payload = {
+          id_roteiros: selectedScriptsForAudio.map(script => script.id),
+          voice_id: selectedVoice!.voice_id,
+          velocidade: audioSpeed,
+          plataforma: selectedVoice!.plataforma
+        };
+      } else {
+        // Payload base para outros webhooks
+        const basePayload = {
+          id_canal: selectedChannelId,
+          nome_canal: selectedChannel.nome_canal,
+          nova_ideia: validIdeas,
+          idioma: language,
+          modelo: selectedModel
+        };
 
-      console.log('📤 Payload enviado:', {
+        // Adicionar dados de voz apenas se necessário
+        payload = selectedWebhookOption.requiresVoice && selectedVoice 
+          ? {
+              ...basePayload,
+              voiceId: selectedVoice.voice_id,
+              plataforma: selectedVoice.plataforma,
+              velocidade: audioSpeed
+            }
+          : basePayload;
+      }
+
+      console.log('📤 Payload enviado:', selectedWebhookMode === 'audio' ? {
         ...payload,
-        nova_ideia_count: payload.nova_ideia.length,
-        nova_ideia_preview: payload.nova_ideia.slice(0, 2)
+        id_roteiros_count: payload.id_roteiros?.length || 0
+      } : {
+        ...payload,
+        nova_ideia_count: payload.nova_ideia?.length || 0,
+        nova_ideia_preview: payload.nova_ideia?.slice(0, 2) || []
       });
       console.log('🎯 Webhook selecionado:', selectedWebhookOption.title);
       console.log('🔗 Endpoint:', selectedWebhookOption.endpoint);
@@ -562,7 +672,11 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
         }
         
         // Limpar ideias para próxima geração
-        setScriptIdeas(['']);
+        if (selectedWebhookMode === 'audio') {
+          setSelectedScriptsForAudio([]);
+        } else {
+          setScriptIdeas(['']);
+        }
       } else {
         throw new Error(`Erro ${response.status}: ${response.statusText}`);
       }
@@ -572,6 +686,19 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
     } finally {
       setIsGeneratingContent(false);
     }
+  };
+
+  // Validação para botão de gerar
+  const isGenerateDisabled = () => {
+    if (selectedWebhookMode === 'audio') {
+      return !selectedChannelId || selectedScriptsForAudio.length === 0 || !selectedVoiceId || isGeneratingContent;
+    }
+    return !selectedChannelId || 
+           scriptIdeas.filter(idea => idea.trim()).length === 0 || 
+           !language.trim() || 
+           !selectedModel.trim() || 
+           (selectedWebhookOption.requiresVoice && !selectedVoiceId) ||
+           isGeneratingContent;
   };
 
   const loadSavedScripts = async () => {
@@ -871,7 +998,7 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
                   {webhookOptions.map((option) => {
                     const IconComponent = option.icon;
                     const isSelected = selectedWebhookMode === option.id;
-                    const isDisabled = option.id === 'audio';
+                    const isDisabled = false;
                     
                     return (
                       <button
@@ -902,11 +1029,6 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
                             <p className={`text-sm ${isSelected ? 'text-white/80' : 'text-gray-400'}`}>
                               {option.description}
                             </p>
-                            {isDisabled && (
-                              <p className="text-xs text-gray-500 mt-1 italic">
-                                Em breve
-                              </p>
-                            )}
                           </div>
                         </div>
                         {isSelected && (
@@ -920,91 +1042,177 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-300">
-                  Idioma
-                </label>
-                <input
-                  type="text"
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
-                  placeholder="Ex: Português, Inglês, Espanhol..."
-                  className="w-full p-4 bg-black border border-gray-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500"
-                />
-              </div>
-
-              <div className="space-y-4">
-                <label className="block text-sm font-medium text-gray-300">
-                  Ideias dos Roteiros
-                </label>
-                
-                <div className="space-y-3">
-                  {scriptIdeas.map((idea, index) => (
-                    <div key={index} className="flex items-start space-x-3">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <span className="text-sm text-gray-400">Ideia {index + 1}</span>
-                          {scriptIdeas.length > 1 && (
-                            <button
-                              onClick={() => removeScriptIdea(index)}
-                              className="p-1 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition-all duration-200"
-                              title="Remover ideia"
-                            >
-                              <X className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                        <textarea
-                          value={idea}
-                          onChange={(e) => updateScriptIdea(index, e.target.value)}
-                          placeholder={`Descreva sua ${index === 0 ? 'primeira' : index === 1 ? 'segunda' : index === 2 ? 'terceira' : `${index + 1}ª`} ideia para o roteiro...`}
-                          className="w-full h-24 p-3 bg-black border border-gray-700 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500 resize-none text-sm"
-                        />
-                        <div className="text-xs text-gray-400 text-right mt-1">
-                          {idea.length} caracteres
-                        </div>
+              {/* Campos condicionais baseados no tipo de geração */}
+              {selectedWebhookMode === 'audio' ? (
+                // Campos específicos para "Gerar Áudio"
+                <>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <label className="block text-sm font-medium text-gray-300">
+                        Roteiros Selecionados
+                      </label>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          onClick={openLoadScriptsModal}
+                          className="flex items-center space-x-2 px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm transition-all duration-200"
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>Carregar Roteiro</span>
+                        </button>
+                        {selectedScriptsForAudio.length > 0 && (
+                          <button
+                            onClick={clearAllScriptsForAudio}
+                            className="flex items-center space-x-2 px-3 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm transition-all duration-200"
+                          >
+                            <X className="w-4 h-4" />
+                            <span>Limpar Todos</span>
+                          </button>
+                        )}
                       </div>
                     </div>
-                  ))}
-                  
-                  {/* Botão para adicionar nova ideia */}
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-gray-400">
-                      {scriptIdeas.filter(idea => idea.trim() !== '').length} de {scriptIdeas.length} ideias
-                    </span>
-                    <button
-                      onClick={addScriptIdea}
-                      disabled={scriptIdeas.length >= 10}
-                      className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-all duration-200 ${
-                        scriptIdeas.length >= 10 
-                          ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
-                          : 'bg-blue-600 hover:bg-blue-700 text-white'
-                      }`}
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>{scriptIdeas.length >= 10 ? 'Máximo atingido' : 'Adicionar'}</span>
-                    </button>
+                    
+                    {selectedScriptsForAudio.length === 0 ? (
+                      <div className="text-center py-8 border-2 border-dashed border-gray-600 rounded-xl">
+                        <FileText className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                        <p className="text-gray-400 text-sm">Nenhum roteiro selecionado</p>
+                        <p className="text-gray-500 text-xs">Clique em "Carregar Roteiro" para adicionar</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        {selectedScriptsForAudio.map((script, index) => {
+                          const color = getCardColor(index);
+                          return (
+                            <div 
+                              key={script.id}
+                              className={`border-l-4 ${color.border} bg-gray-800/30 rounded-r-xl p-4 group`}
+                            >
+                              <div className="flex items-start justify-between">
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center space-x-2 mb-2">
+                                    <div className={`w-3 h-3 ${color.bg} rounded-full`}></div>
+                                    <span className="text-xs text-gray-400">Roteiro #{script.id}</span>
+                                    <span className="text-xs text-gray-500">
+                                      {new Date(script.created_at).toLocaleDateString('pt-BR')}
+                                    </span>
+                                  </div>
+                                  <h4 className="text-white font-medium mb-2 line-clamp-1">
+                                    {script.titulo || 'Sem título'}
+                                  </h4>
+                                  <p className="text-gray-300 text-sm line-clamp-2">
+                                    {script.roteiro.substring(0, 150)}
+                                    {script.roteiro.length > 150 && '...'}
+                                  </p>
+                                  <div className="text-xs text-gray-500 mt-2">
+                                    {script.roteiro.length} caracteres
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => removeScriptForAudio(script.id)}
+                                  className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-all duration-200 opacity-0 group-hover:opacity-100"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                        <div className="text-center text-sm text-gray-400">
+                          {selectedScriptsForAudio.length} roteiro{selectedScriptsForAudio.length !== 1 ? 's' : ''} selecionado{selectedScriptsForAudio.length !== 1 ? 's' : ''}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
-              </div>
+                </>
+              ) : (
+                // Campos para outros tipos de geração
+                <>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-300">
+                      Idioma
+                    </label>
+                    <input
+                      type="text"
+                      value={language}
+                      onChange={(e) => setLanguage(e.target.value)}
+                      placeholder="Ex: Português, Inglês, Espanhol..."
+                      className="w-full p-4 bg-black border border-gray-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500"
+                    />
+                  </div>
 
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-300">
-                  Modelo de IA
-                </label>
-                <select
-                  value={selectedModel}
-                  onChange={(e) => setSelectedModel(e.target.value)}
-                  className="w-full p-4 bg-black border border-gray-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all duration-200 text-white"
-                >
-                  <option value="">Selecione um modelo</option>
-                  <option value="GPT-5">GPT-5</option>
-                  <option value="GPT-4.1-mini">GPT-4.1-mini</option>
-                  <option value="Sonnet-4">Sonnet-4</option>
-                  <option value="Gemini-2.5-Pro">Gemini-2.5-Pro</option>
-                  <option value="Gemini-2.5-Flash">Gemini-2.5-Flash</option>
-                </select>
-              </div>
+                  <div className="space-y-4">
+                    <label className="block text-sm font-medium text-gray-300">
+                      Ideias dos Roteiros
+                    </label>
+                    
+                    <div className="space-y-3">
+                      {scriptIdeas.map((idea, index) => (
+                        <div key={index} className="flex items-start space-x-3">
+                          <div className="flex-1">
+                            <div className="flex items-center space-x-2 mb-2">
+                              <span className="text-sm text-gray-400">Ideia {index + 1}</span>
+                              {scriptIdeas.length > 1 && (
+                                <button
+                                  onClick={() => removeScriptIdea(index)}
+                                  className="p-1 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded transition-all duration-200"
+                                  title="Remover ideia"
+                                >
+                                  <X className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                            <textarea
+                              value={idea}
+                              onChange={(e) => updateScriptIdea(index, e.target.value)}
+                              placeholder={`Descreva sua ${index === 0 ? 'primeira' : index === 1 ? 'segunda' : index === 2 ? 'terceira' : `${index + 1}ª`} ideia para o roteiro...`}
+                              className="w-full h-24 p-3 bg-black border border-gray-700 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500 resize-none text-sm"
+                            />
+                            <div className="text-xs text-gray-400 text-right mt-1">
+                              {idea.length} caracteres
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      
+                      {/* Botão para adicionar nova ideia */}
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-400">
+                          {scriptIdeas.filter(idea => idea.trim() !== '').length} de {scriptIdeas.length} ideias
+                        </span>
+                        <button
+                          onClick={addScriptIdea}
+                          disabled={scriptIdeas.length >= 10}
+                          className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-all duration-200 ${
+                            scriptIdeas.length >= 10 
+                              ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                              : 'bg-blue-600 hover:bg-blue-700 text-white'
+                          }`}
+                        >
+                          <Plus className="w-4 h-4" />
+                          <span>{scriptIdeas.length >= 10 ? 'Máximo atingido' : 'Adicionar'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-300">
+                      Modelo de IA
+                    </label>
+                    <select
+                      value={selectedModel}
+                      onChange={(e) => setSelectedModel(e.target.value)}
+                      className="w-full p-4 bg-black border border-gray-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all duration-200 text-white"
+                    >
+                      <option value="">Selecione um modelo</option>
+                      <option value="GPT-5">GPT-5</option>
+                      <option value="GPT-4.1-mini">GPT-4.1-mini</option>
+                      <option value="Sonnet-4">Sonnet-4</option>
+                      <option value="Gemini-2.5-Pro">Gemini-2.5-Pro</option>
+                      <option value="Gemini-2.5-Flash">Gemini-2.5-Flash</option>
+                    </select>
+                  </div>
+                </>
+              )}
 
               {/* Voice Selection */}
               {selectedWebhookOption.requiresVoice && (
@@ -1095,24 +1303,10 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
               <div className="flex justify-center">
                 <button
                   onClick={generateContent}
-                  disabled={
-                    !selectedChannelId || 
-                    scriptIdeas.filter(idea => idea.trim()).length === 0 || 
-                    !language.trim() || 
-                    !selectedModel.trim() || 
-                    (selectedWebhookOption.requiresVoice && !selectedVoiceId) ||
-                    isGeneratingContent ||
-                    selectedWebhookMode === 'audio' // Temporariamente desabilitado
-                  }
+                  disabled={isGenerateDisabled()}
                   className={`
                     flex items-center space-x-3 px-8 py-4 rounded-xl font-medium transition-all duration-300 transform
-                    ${!selectedChannelId || 
-                      scriptIdeas.filter(idea => idea.trim()).length === 0 || 
-                      !language.trim() || 
-                      !selectedModel.trim() || 
-                      (selectedWebhookOption.requiresVoice && !selectedVoiceId) ||
-                      isGeneratingContent ||
-                      selectedWebhookMode === 'audio'
+                    ${isGenerateDisabled()
                       ? 'bg-gray-800 text-gray-600 cursor-not-allowed border border-gray-700'
                       : `bg-gradient-to-r ${selectedWebhookOption.color} text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl`
                     }
@@ -1364,6 +1558,107 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
                               </div>
                             </div>
                           ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Load Scripts Modal (específico para "Gerar Áudio") */}
+      {showLoadScriptsModal && (
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 z-50"
+          onClick={closeLoadScriptsModal}
+        >
+          <div 
+            className="bg-gray-900 rounded-2xl border border-gray-700 w-full max-w-4xl h-[90vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-700 flex-shrink-0">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-purple-500 rounded-xl flex items-center justify-center">
+                  <Music className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-light text-white">Selecionar Roteiros</h2>
+                  <p className="text-gray-400 text-sm">
+                    {selectedChannel?.nome_canal} • {availableScriptsForChannel.length} roteiro{availableScriptsForChannel.length !== 1 ? 's' : ''} disponível{availableScriptsForChannel.length !== 1 ? 'is' : ''}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={closeLoadScriptsModal}
+                className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all duration-200"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="flex-1 overflow-y-auto p-6">
+              {isLoadingChannelScripts ? (
+                <div className="flex items-center justify-center py-20">
+                  <div className="flex items-center space-x-3 text-gray-400">
+                    <Loader2 className="w-6 h-6 animate-spin" />
+                    <span>Carregando roteiros do canal...</span>
+                  </div>
+                </div>
+              ) : availableScriptsForChannel.length === 0 ? (
+                <div className="text-center py-20">
+                  <div className="w-16 h-16 bg-gray-800 rounded-2xl flex items-center justify-center mx-auto mb-6">
+                    <FileText className="w-8 h-8 text-gray-400" />
+                  </div>
+                  <h3 className="text-xl font-light text-white mb-2">Nenhum roteiro encontrado</h3>
+                  <p className="text-gray-400">Este canal ainda não possui roteiros salvos</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {availableScriptsForChannel.map((script, index) => {
+                    const color = getCardColor(index);
+                    const isAlreadySelected = selectedScriptsForAudio.some(s => s.id === script.id);
+                    
+                    return (
+                      <div 
+                        key={script.id}
+                        onClick={() => !isAlreadySelected && addScriptForAudio(script)}
+                        className={`border-l-4 ${color.border} bg-gray-800/30 rounded-r-xl p-4 transition-all duration-200 cursor-pointer group ${
+                          isAlreadySelected 
+                            ? 'opacity-50 cursor-not-allowed' 
+                            : 'hover:bg-gray-800/50'
+                        }`}
+                      >
+                        <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-center space-x-2">
+                            <div className={`w-3 h-3 ${color.bg} rounded-full`}></div>
+                            <span className="text-xs text-gray-400">#{script.id}</span>
+                            {isAlreadySelected && (
+                              <span className="text-xs text-green-400 bg-green-900/30 px-2 py-0.5 rounded-full">
+                                Selecionado
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-xs text-gray-500">
+                            {new Date(script.created_at).toLocaleDateString('pt-BR')}
+                          </span>
+                        </div>
+                        
+                        <h4 className="text-white font-medium mb-2 line-clamp-2">
+                          {script.titulo || 'Sem título'}
+                        </h4>
+                        
+                        <p className="text-gray-300 text-sm line-clamp-3 mb-3">
+                          {script.roteiro.substring(0, 150)}
+                          {script.roteiro.length > 150 && '...'}
+                        </p>
+                        
+                        <div className="text-xs text-gray-500">
+                          {script.roteiro.length} caracteres
                         </div>
                       </div>
                     );

@@ -430,18 +430,15 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
       setMessage({ type: 'error', text: 'Selecione um canal, digite pelo menos uma ideia para o roteiro, especifique o idioma e escolha um modelo.' });
       return;
     }
-    
-    const selectedChannel = channels.find(c => c.id === selectedChannelId);
-    const selectedVoice = selectedVoiceId ? voices.find(v => v.id === selectedVoiceId) : null;
-    
-    // Filter valid ideas (non-empty)
-    const ideas = scriptIdeas.filter(idea => idea.trim() !== '');
-    console.log('💡 [GENERATION] Ideias válidas:', ideas);
-    
-    if (ideas.length === 0) {
-      setMessage({ type: 'error', text: 'Por favor, adicione pelo menos uma ideia.' });
+
+    // Validação específica para webhooks que requerem voz
+    if (selectedWebhookOption.requiresVoice && !selectedVoiceId) {
+      setMessage({ type: 'error', text: 'Para esta opção, é necessário selecionar uma voz.' });
       return;
     }
+
+    const selectedChannel = channels.find(c => c.id === selectedChannelId);
+    const selectedVoice = selectedVoiceId ? voices.find(v => v.id === selectedVoiceId) : null;
     
     if (!selectedChannel) {
       setMessage({ type: 'error', text: 'Canal selecionado não encontrado.' });
@@ -464,7 +461,8 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
       const basePayload = {
         id_canal: selectedChannelId,
         nome_canal: selectedChannel.nome_canal,
-        nova_ideia: ideas,
+        nova_ideia: validIdeas,
+        idioma: language,
         modelo: selectedModel
       };
 

@@ -1,0 +1,181 @@
+{
+  "name": "[SUB] Limpar Audios Temp",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -1216,
+        -80
+      ],
+      "id": "c92cc5b7-4def-4f69-b593-09699ded78be",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "bucketName": "audios",
+        "fileKey": "={{ $json.Key }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        -272,
+        0
+      ],
+      "id": "b72fa9a0-ba4a-477d-94ab-04cc8e5c215d",
+      "name": "Delete a file1",
+      "credentials": {
+        "s3": {
+          "id": "MooSYLbzepuRreoM",
+          "name": "S3 account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        -496,
+        -80
+      ],
+      "id": "e6b2454e-e0bb-4bf8-84ab-99d31de597eb",
+      "name": "Loop Delete1"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        -272,
+        -160
+      ],
+      "id": "caf3f174-9f51-4bf4-ac34-d2c13bbfa598",
+      "name": "Limita 1",
+      "alwaysOutputData": true
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "bucketName": "audios",
+        "returnAll": true,
+        "options": {
+          "folderKey": "temp/"
+        }
+      },
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        -992,
+        -80
+      ],
+      "id": "e94020d4-f858-4439-980b-0bd73d8ca597",
+      "name": "Lista Arquivos Existentes",
+      "alwaysOutputData": true,
+      "credentials": {
+        "s3": {
+          "id": "MooSYLbzepuRreoM",
+          "name": "S3 account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fieldToSplitOut": "Key",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [
+        -752,
+        -80
+      ],
+      "id": "3a44c422-8e8d-4a7d-9bd9-864e2fa1c457",
+      "name": "Split Out",
+      "alwaysOutputData": true
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When Executed by Another Workflow": {
+      "main": [
+        [
+          {
+            "node": "Lista Arquivos Existentes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete a file1": {
+      "main": [
+        [
+          {
+            "node": "Loop Delete1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Delete1": {
+      "main": [
+        [
+          {
+            "node": "Limita 1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Delete a file1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Lista Arquivos Existentes": {
+      "main": [
+        [
+          {
+            "node": "Split Out",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Split Out": {
+      "main": [
+        [
+          {
+            "node": "Loop Delete1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "c4038111-317c-4e2f-a028-29e2934b1602",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c6fbb6bd9dd871ca93aa227002d9065607edffcef72444963c91c9c146b6ac39"
+  },
+  "id": "mLOQLoO6CeLlMYYS",
+  "tags": []
+}

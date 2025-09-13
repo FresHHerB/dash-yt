@@ -734,7 +734,7 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
                   {webhookOptions.map((option) => {
                     const IconComponent = option.icon;
                     const isSelected = selectedWebhookMode === option.id;
-                    const isDisabled = option.id === 'audio'; // Temporariamente desabilitado
+                    const isDisabled = option.id === 'audio';
                     
                     return (
                       <button
@@ -831,13 +831,23 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
                   ))}
                   
                   {/* Botão para adicionar nova ideia */}
-                  <button
-                    onClick={addScriptIdea}
-                    className="flex items-center space-x-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white rounded-lg transition-all duration-200 border border-gray-600 hover:border-gray-500"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>Adicionar nova ideia</span>
-                  </button>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-gray-400">
+                      {scriptIdeas.filter(idea => idea.trim() !== '').length} de {scriptIdeas.length} ideias
+                    </span>
+                    <button
+                      onClick={addScriptIdea}
+                      disabled={scriptIdeas.length >= 10}
+                      className={`flex items-center space-x-2 px-3 py-2 rounded-lg transition-all duration-200 ${
+                        scriptIdeas.length >= 10 
+                          ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                          : 'bg-blue-600 hover:bg-blue-700 text-white'
+                      }`}
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>{scriptIdeas.length >= 10 ? 'Máximo atingido' : 'Adicionar'}</span>
+                    </button>
+                  </div>
                 </div>
               </div>
 

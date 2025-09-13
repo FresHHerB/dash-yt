@@ -567,6 +567,7 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
       if (selectedWebhookMode === 'audio') {
         // Payload específico para "Gerar Áudio"
         payload = {
+         id_canal: selectedChannelId,
           id_roteiros: selectedScriptsForAudio.map(script => script.id),
           voice_id: selectedVoice!.voice_id,
           velocidade: audioSpeed,

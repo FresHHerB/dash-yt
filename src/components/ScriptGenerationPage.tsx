@@ -439,7 +439,8 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
 
     const selectedChannel = channels.find(c => c.id === selectedChannelId);
     const selectedVoice = selectedVoiceId ? voices.find(v => v.id === selectedVoiceId) : null;
-    
+    const validIdeas = ideas.filter(idea => idea.trim() !== '');
+    if (validIdeas.length === 0) {
     if (!selectedChannel) {
       setMessage({ type: 'error', text: 'Canal selecionado não encontrado.' });
       return;
@@ -462,7 +463,7 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
         id_canal: selectedChannelId,
         nome_canal: selectedChannel.nome_canal,
         nova_ideia: validIdeas,
-        idioma: language,
+        nova_ideia: validIdeas,
         modelo: selectedModel
       };
 
@@ -476,7 +477,11 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
           }
         : basePayload;
 
-      console.log('📤 Payload enviado:', payload);
+      console.log('📤 Payload enviado:', {
+        ...payload,
+        nova_ideia_count: payload.nova_ideia.length,
+        nova_ideia_preview: payload.nova_ideia.slice(0, 2)
+      });
       console.log('🎯 Webhook selecionado:', selectedWebhookOption.title);
       console.log('🔗 Endpoint:', selectedWebhookOption.endpoint);
 
@@ -501,7 +506,7 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
           setMessage({ type: 'success', text: `${result.length} roteiro${result.length > 1 ? 's' : ''} ${selectedWebhookOption.id === 'script' ? 'gerado' : 'gerado com áudio'}${result.length > 1 ? 's' : ''} com sucesso!` });
         } else {
           throw new Error('Nenhum roteiro foi gerado');
-        }
+        setIdeas(['']);
       } else {
         throw new Error(`Erro ${response.status}: ${response.statusText}`);
       }

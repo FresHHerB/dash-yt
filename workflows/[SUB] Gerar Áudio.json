@@ -1,0 +1,1434 @@
+{
+  "name": "[SUB] Gerar Áudio",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "getAll",
+        "bucketName": "audios",
+        "returnAll": true,
+        "options": {
+          "folderKey": "temp/"
+        }
+      },
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        1216,
+        496
+      ],
+      "id": "51fcce82-089a-4bf1-a3d2-6be1ea69e2b9",
+      "name": "Get many files2",
+      "alwaysOutputData": true,
+      "credentials": {
+        "s3": {
+          "id": "MooSYLbzepuRreoM",
+          "name": "S3 account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Inicia uma variável para guardar o maior número encontrado.\nlet maxNumber = 0;\n\n// 2. Define a expressão regular para extrair o número do nome do arquivo.\nconst regex = /^audio(\\d+)\\.mp3$/;\n\n// 3. Percorre cada item que entrou no nó.\nfor (const item of items) {\n  // Pega o caminho completo do arquivo da propriedade \"Key\".\n  const fullPath = item.json.Key; // Ex: \"temp/audio3.mp3\"\n\n  // Verifica se 'fullPath' realmente existe e é uma string.\n  if (fullPath && typeof fullPath === 'string') {\n\n    // Extrai apenas o nome do arquivo do caminho completo.\n    // \"temp/audio3.mp3\" -> \"audio3.mp3\"\n    const fileName = fullPath.split('/').pop();\n\n    // Tenta encontrar uma correspondência com a expressão regular.\n    const match = fileName.match(regex);\n\n    // 4. Se encontrou uma correspondência...\n    if (match && match[1]) {\n      // Converte o número para um inteiro.\n      const currentNumber = parseInt(match[1], 10);\n\n      // 5. Se o número atual for maior que o maior já registrado...\n      if (currentNumber > maxNumber) {\n        // ...atualiza o maior número.\n        maxNumber = currentNumber;\n      }\n    }\n  }\n}\n\n// 6. Calcula o próximo número da sequência.\nconst nextNumber = maxNumber + 1;\n\n// ---> ALTERAÇÃO AQUI <---\n// 7. Monta o nome completo (Key) do próximo arquivo, incluindo a pasta e a extensão.\nconst nextFileKey = `temp/audio${nextNumber}.mp3`;\n\n// 8. Retorna o resultado no formato padrão do n8n.\nreturn [{\n  json: {\n    nextFileName: nextFileKey\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1408,
+        496
+      ],
+      "id": "51357a91-d569-443a-a0ce-df3cb1d1258a",
+      "name": "Code"
+    },
+    {
+      "parameters": {
+        "operation": "getAll",
+        "bucketName": "audios",
+        "returnAll": true,
+        "options": {
+          "folderKey": "temp/"
+        }
+      },
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        1408,
+        160
+      ],
+      "id": "8d43ff82-59bb-4b5e-9b9d-fcd8a1e1cbb1",
+      "name": "Coleta Lista Arquivos Final1",
+      "alwaysOutputData": true,
+      "credentials": {
+        "s3": {
+          "id": "MooSYLbzepuRreoM",
+          "name": "S3 account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// ## 1. CONFIGURE SUA URL BASE AQUI ##\n// Altere 'https://example.com/' para o URL público real do seu bucket MinIO ou S3.\nconst baseUrl = 'http://minio:9000/audios/';\n\n// 2. Prepara um array para guardar a lista de URLs formatadas.\nconst urlList = [];\n\n// 3. Percorre cada item da lista de arquivos que entrou no nó.\nfor (const item of items) {\n  // Pega o nome do arquivo da propriedade \"Key\".\n  const fileName = item.json.Key;\n\n  // Garante que o nome do arquivo existe antes de processar.\n  if (fileName) {\n    // Monta a URL completa.\n    const fullUrl = `${baseUrl}${fileName}`;\n\n    // Cria o objeto no formato { \"audio_url\": \"...\" }.\n    const urlObject = {\n      audio_url: fullUrl\n    };\n\n    // Adiciona o objeto formatado à nossa lista.\n    urlList.push(urlObject);\n  }\n}\n\n// 4. Retorna um único item contendo o array final.\n// O próximo nó receberá um campo \"audio_urls\" com a lista completa.\nreturn [{\n  json: {\n    audio_urls: urlList\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1632,
+        160
+      ],
+      "id": "fdfa0f0a-8e51-44aa-947b-611525eff4b1",
+      "name": "Gera Lista URLs2"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://autodark_nca:8080/v1/audio/concatenate",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "globaus"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  JSON.stringify({\n    \"audio_urls\": $json.audio_urls,\n    \"id\": \"custom-request-id-123\"\n  }, null, 2)\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1872,
+        160
+      ],
+      "id": "1e57f728-21a9-45d4-837b-40e3cf651a44",
+      "name": "concatenaAudio"
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "audios",
+        "fileName": "={{ $('Code').first().json.nextFileName }}",
+        "binaryPropertyName": "output.mp3",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        2416,
+        512
+      ],
+      "id": "0a600e2c-1114-4858-8a72-5cc58b846fb2",
+      "name": "Upload a file1",
+      "credentials": {
+        "s3": {
+          "id": "MooSYLbzepuRreoM",
+          "name": "S3 account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Código JavaScript para nó Code no n8n\n// Quebra o texto do roteiro em partes, respeitando o limite de caracteres,\n// pontos finais e removendo aspas duplas.\n\n// Pega os inputs\nconst novoRoteiro = $input.first().json.roteiro;\nconst charControl = $input.first().json.char_control;\n\nfunction quebrarTexto(texto, maxChars) {\n  // Remove aspas duplas, quebras de linha desnecessárias e espaços extras\n  const textoLimpo = texto.replace(/\"/g, '').replace(/\\s+/g, ' ').trim();\n  \n  if (textoLimpo.length <= maxChars) {\n    // Se o texto inteiro cabe no limite, retorna como uma única parte\n    return [textoLimpo];\n  }\n  \n  const partes = [];\n  let inicio = 0;\n  \n  while (inicio < textoLimpo.length) {\n    // Calcula o fim baseado no limite de caracteres\n    let fim = inicio + maxChars;\n    \n    // Se chegamos ao final do texto, pega o resto\n    if (fim >= textoLimpo.length) {\n      partes.push(textoLimpo.substring(inicio).trim());\n      break;\n    }\n    \n    // Procura o último ponto dentro do limite de caracteres\n    let ultimoPonto = -1;\n    for (let i = fim; i >= inicio; i--) {\n      if (textoLimpo[i] === '.') {\n        ultimoPonto = i;\n        break;\n      }\n    }\n    \n    if (ultimoPonto === -1) {\n      // Se não encontrou nenhum ponto, procura a partir do início\n      for (let i = inicio; i < textoLimpo.length; i++) {\n        if (textoLimpo[i] === '.') {\n          ultimoPonto = i;\n          break;\n        }\n      }\n      \n      if (ultimoPonto === -1) {\n        // Se ainda não encontrou ponto, pega o texto restante\n        partes.push(textoLimpo.substring(inicio).trim());\n        break;\n      }\n    }\n    \n    // Adiciona a parte incluindo o ponto final\n    const parte = textoLimpo.substring(inicio, ultimoPonto + 1).trim();\n    if (parte.length > 0) {\n      partes.push(parte);\n    }\n    \n    // Move o início para depois do ponto\n    inicio = ultimoPonto + 1;\n    \n    // Remove espaços no início da próxima parte\n    while (inicio < textoLimpo.length && textoLimpo[inicio] === ' ') {\n      inicio++;\n    }\n  }\n  \n  return partes.filter(parte => parte.length > 0);\n}\n\n// Executa a quebra do texto\nconst partesRoteiro = quebrarTexto(novoRoteiro, charControl);\n\n// Retorna array de objetos com os trechos\nreturn partesRoteiro.map(parte => ({ trecho: parte }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        752,
+        272
+      ],
+      "id": "159cb699-7424-4099-80f4-aa91466deec0",
+      "name": "Code3"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "27752107-20e1-4911-b450-f77f699518af",
+              "name": "roteiro",
+              "value": "={{ $json.roteiro_final }}",
+              "type": "string"
+            },
+            {
+              "id": "57440f4f-ded5-486b-a74c-99f3dd90884a",
+              "name": "char_control",
+              "value": 2000,
+              "type": "number"
+            },
+            {
+              "id": "8618ec7c-c866-4ce5-826d-fb3625aad15d",
+              "name": "plataforma",
+              "value": "={{ $('setaData').item.json.plataforma }}",
+              "type": "string"
+            },
+            {
+              "id": "f894b48a-3f72-4510-b914-c1387533c7dd",
+              "name": "voice_id",
+              "value": "={{ $('setaData').item.json.voiceId }}",
+              "type": "string"
+            },
+            {
+              "id": "81014cc6-8a80-49d8-ada0-d6902e4de56c",
+              "name": "api_key",
+              "value": "={{ $('Coleta API Audio').item.json.api_key }}",
+              "type": "string"
+            },
+            {
+              "id": "2e92bed3-7a53-41f5-a39e-ec9893540b05",
+              "name": "speed",
+              "value": "={{ $('setaData').item.json.speed }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        560,
+        272
+      ],
+      "id": "23ea0e45-51da-47c2-8da1-f3d032ad3cc2",
+      "name": "setParam"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $('setParam').first().json.plataforma }}",
+                    "rightValue": "Fish-Audio",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "77450b63-b562-4344-b9f3-ae233b228d72"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "FishAudio"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "41e98898-1008-4300-84a9-80fe653fa50a",
+                    "leftValue": "={{ $('setParam').first().json.plataforma }}",
+                    "rightValue": "Minimax",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Minimax"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 2
+                },
+                "conditions": [
+                  {
+                    "id": "26d1c31a-8c92-460e-92a3-356bc61d5166",
+                    "leftValue": "={{ $('setParam').first().json.plataforma }}",
+                    "rightValue": "ElevenLabs",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "ElevenLabs"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [
+        1632,
+        496
+      ],
+      "id": "203ef06c-1f13-454b-b803-1668852de688",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.fish.audio/v1/tts",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "model",
+              "value": "speech-1.5"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('setParam').first().json.api_key }}"
+            },
+            {
+              "name": "=model",
+              "value": "speech-1.5"
+            }
+          ]
+        },
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "text",
+              "value": "={{ $('Loop Over Items').item.json.trecho }}"
+            },
+            {
+              "name": "reference_id",
+              "value": "={{ $('setParam').first().json.voice_id }}"
+            },
+            {
+              "name": "format",
+              "value": "mp3"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "output.mp3"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        336
+      ],
+      "id": "096e1164-a6ba-4a29-a0e2-92528bd6039e",
+      "name": "Gera Audio FishAudio"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "apis",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "plataforma",
+              "keyValue": "={{ $('setaData').item.json.plataforma }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        176,
+        -96
+      ],
+      "id": "dcc498b2-daad-494f-8f49-7afe7d7e9de7",
+      "name": "Coleta API Audio",
+      "credentials": {
+        "supabaseApi": {
+          "id": "oGUlDIJIN0NRUbWc",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=https://api.elevenlabs.io/v1/text-to-speech/{{ $('setParam').first().json.voice_id }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "output_format",
+              "value": "mp3_44100_128"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "xi-api-key",
+              "value": "={{ $('setParam').first().json.api_key }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"text\": \"{{ $('Loop Over Items').item.json.trecho }}\",\n  \"model_id\": \"eleven_multilingual_v2\",\n  \"voice_settings\": {\n    \"speed\": {{ $('setParam').first().json.speed }}\n  }\n}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "output.mp3"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2000,
+        720
+      ],
+      "id": "9af2292a-0eb8-49e4-9f53-1aa9940b8cbb",
+      "name": "Gerar Áudio ElevenLabs"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "mLOQLoO6CeLlMYYS",
+          "mode": "list",
+          "cachedResultName": "[SUB] Limpar Audios Temp"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        336,
+        -96
+      ],
+      "id": "b12da1c5-091b-492e-b2d4-955a914f1358",
+      "name": "Executa Limpeza"
+    },
+    {
+      "parameters": {
+        "workflowId": {
+          "__rl": true,
+          "value": "mLOQLoO6CeLlMYYS",
+          "mode": "list",
+          "cachedResultName": "[SUB] Limpar Audios Temp"
+        },
+        "workflowInputs": {
+          "mappingMode": "defineBelow",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": true
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1.2,
+      "position": [
+        2752,
+        160
+      ],
+      "id": "c8f89d6f-cc5c-4e7b-8758-44850c51faef",
+      "name": "Executa Limpeza1"
+    },
+    {
+      "parameters": {
+        "inputSource": "passthrough"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        -384,
+        -96
+      ],
+      "id": "90280c88-4fa7-4204-8f09-3ac75ad44f21",
+      "name": "Gerar Áudio"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "ed260f62-d77d-4e9b-b3b3-4be21b5836c5",
+              "name": "id_canal",
+              "value": "={{ $('Gerar Áudio').item.json.id_canal }}",
+              "type": "string"
+            },
+            {
+              "id": "e37fdc49-49f9-4407-9ce6-9fc2e297bde4",
+              "name": "nome_canal",
+              "value": "={{ $('Gerar Áudio').item.json.nome_canal }}",
+              "type": "string"
+            },
+            {
+              "id": "fac47da9-60d7-4018-833f-50178c46bd41",
+              "name": "id_roteiro",
+              "value": "={{ $('Gerar Áudio').item.json.id_roteiro }}",
+              "type": "string"
+            },
+            {
+              "id": "df0826f2-93da-4765-a5af-b4bd2a440363",
+              "name": "roteiro",
+              "value": "={{ $('Gerar Áudio').item.json.roteiro }}",
+              "type": "string"
+            },
+            {
+              "id": "4fe97e5d-7eef-42b5-a3c4-d90f6cbdef45",
+              "name": "voiceId",
+              "value": "={{ $('Gerar Áudio').item.json.voiceId }}",
+              "type": "string"
+            },
+            {
+              "id": "2f7daa6e-39a6-40db-b476-64d2eaa2d905",
+              "name": "plataforma",
+              "value": "={{ $('Gerar Áudio').item.json.plataforma }}",
+              "type": "string"
+            },
+            {
+              "id": "fc695805-f5f4-4f0a-9801-7c04758faef0",
+              "name": "speed",
+              "value": "={{ $('Gerar Áudio').item.json.speed }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        0,
+        -96
+      ],
+      "id": "07fd1868-5c84-46ce-8936-f7e5be831a48",
+      "name": "setaData"
+    },
+    {
+      "parameters": {
+        "operation": "copy",
+        "sourcePath": "={{ $json.pasta_fileKey }}",
+        "destinationPath": "={{ $json.path_final }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        2288,
+        160
+      ],
+      "id": "ce6c8af6-3c49-4786-a88f-f96aeabfd496",
+      "name": "Copy a file",
+      "credentials": {
+        "s3": {
+          "id": "MooSYLbzepuRreoM",
+          "name": "S3 account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "delete",
+        "bucketName": "audios",
+        "fileKey": "={{ $('setPath').item.json.fileKey }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        2496,
+        160
+      ],
+      "id": "28b9cbf2-81ec-4e0a-a7b0-18b366b39fbe",
+      "name": "Delete a file",
+      "credentials": {
+        "s3": {
+          "id": "MooSYLbzepuRreoM",
+          "name": "S3 account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "b9458111-2d38-4449-a912-195d3996ef6b",
+              "name": "fileKey",
+              "value": "={{ $item(\"0\").$node[\"concatenaAudio\"].json[\"response\"].split('/').pop() }}",
+              "type": "string"
+            },
+            {
+              "id": "1b552939-69d0-4e46-968d-ca4a77d8d5af",
+              "name": "pasta_fileKey",
+              "value": "=/{{ $item(\"0\").$node[\"concatenaAudio\"].json[\"response\"].split('/').slice(3).join('/') }}",
+              "type": "string"
+            },
+            {
+              "id": "f3e70781-97fc-4acc-a559-5cef5c821bd9",
+              "name": "path_final",
+              "value": "=/audios/{{ $('setaData').first().json.nome_canal }}/{{ $item(\"0\").$node[\"concatenaAudio\"].json[\"response\"].split('/').pop() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2080,
+        160
+      ],
+      "id": "baeabc13-32bd-4594-9690-2c2d9c2079ac",
+      "name": "setPath"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "tableId": "roteiros",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "condition": "eq",
+              "keyValue": "={{ $('setaData').first().json.id_roteiro }}"
+            }
+          ]
+        },
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "audio_path",
+              "fieldValue": "=https://autodark-minio.tmtibo.easypanel.host{{ $('setPath').first().json.path_final }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        2960,
+        160
+      ],
+      "id": "786e2ecc-3c64-4796-9280-e2bc4d23c679",
+      "name": "Update a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "oGUlDIJIN0NRUbWc",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "98815fd1-68ab-4a38-a356-b56d1fef9900",
+              "name": "id_roteiro",
+              "value": "={{ $json.id }}",
+              "type": "number"
+            },
+            {
+              "id": "0cdb48ef-7bf6-4806-86ad-caa897ca7798",
+              "name": "roteiro",
+              "value": "={{ $json.roteiro }}",
+              "type": "string"
+            },
+            {
+              "id": "503cf57d-0cc6-4f17-9bdb-6d931851f674",
+              "name": "canal_id",
+              "value": "={{ $json.canal_id }}",
+              "type": "number"
+            },
+            {
+              "id": "4d4d261c-9431-4c18-ac92-ed6971ad921b",
+              "name": "titulo",
+              "value": "={{ $json.titulo }}",
+              "type": "string"
+            },
+            {
+              "id": "802ba4fd-80a6-4c2d-aa6a-cb322a88cbd2",
+              "name": "audio_path",
+              "value": "={{ $json.audio_path }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3168,
+        160
+      ],
+      "id": "2a98f33d-1ab0-4913-9b94-eff60490f15f",
+      "name": "setSaida"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "c40e8100-66cb-401e-9991-b03f4e5caea4",
+              "name": "nextFileName",
+              "value": "={{ $('Code').item.json.nextFileName }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2608,
+        512
+      ],
+      "id": "33cc81e6-21bb-4e03-aa22-47a843a5036b",
+      "name": "Edit Fields"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.limit",
+      "typeVersion": 1,
+      "position": [
+        1216,
+        160
+      ],
+      "id": "c9142fe4-9841-44e4-9952-5249e430f9d1",
+      "name": "Limite 1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.minimax.io/v1/t2a_v2?GroupId=1891907835948704017",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{ $('setParam').first().json.api_key }}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"speech-2.5-hd-preview\",\n  \"text\": \"{{ $('Loop Over Items').first().json.trecho }}\",\n  \"stream\": false,\n  \"output_format\": \"url\",\n  \"voice_setting\": {\n    \"voice_id\": \"{{ $('setParam').first().json.voice_id }}\",\n    \"speed\": {{ $('setParam').first().json.speed }},\n    \"vol\": 1,\n    \"pitch\": 0\n  },\n  \"audio_setting\": {\n    \"sample_rate\": 32000,\n    \"bitrate\": 128000,\n    \"format\": \"mp3\",\n    \"channel\": 1\n  }\n}",
+        "options": {
+          "redirect": {
+            "redirect": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1888,
+        512
+      ],
+      "id": "46b34883-2a2f-4a69-aa47-dcd6d8bb6ca4",
+      "name": "Gera Audio Minimax"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.data.audio }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "file",
+              "outputPropertyName": "output.mp3"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        2096,
+        512
+      ],
+      "id": "f59ba1b7-2f40-41c7-b4a7-d77f84b5d294",
+      "name": "Baixa Audio Minimax"
+    },
+    {
+      "parameters": {
+        "text": "={{ $('setaData').item.json.roteiro }}",
+        "attributes": {
+          "attributes": [
+            {
+              "name": "is_structured",
+              "type": "boolean",
+              "description": "is_structured",
+              "required": true
+            }
+          ]
+        },
+        "options": {
+          "systemPromptTemplate": "=O erro persiste porque o **System Prompt Template** ainda contém `true/false` no formato de resposta. Preciso corrigir isso.\n\nAqui está a correção completa para o **System Prompt Template** no n8n:\n\n```\nVocê é um agente especializado em verificar se textos possuem estrutura básica de pontuação.\n\nTAREFA: Analisar o texto fornecido e retornar apenas um boolean: is_structured\n\nCRITÉRIOS PARA is_structured = true:\n- O texto possui pontos finais (.) no final de frases\n- O texto possui vírgulas (,) para separar elementos\n- O texto possui outros sinais de pontuação básicos quando necessário (: ; ? !)\n- As frases não são apenas um bloco contínuo sem pontuação\n\nCRITÉRIOS PARA is_structured = false:\n- O texto é um bloco contínuo sem pontuação adequada\n- Ausência significativa de pontos finais\n- Ausência significativa de vírgulas\n- Texto parece ser uma transcrição de fala sem formatação\n\nIMPORTANTE:\n- NÃO analise a qualidade ou correção da pontuação\n- NÃO analise organização de parágrafos\n- NÃO analise conteúdo ou estilo\n- APENAS verifique se o texto possui pontuação básica presente\n\nEXEMPLO:\n- Texto com pontuação: \"Olá. Como você está? Espero que bem, obrigado.\" → is_structured: true\n- Texto sem pontuação: \"olá como você está espero que bem obrigado\" → is_structured: false\n```\n\n**Alterações principais:**\n1. Removi toda a seção **FORMATO DE RESPOSTA** que continha `true/false`\n2. Simplifiquei os exemplos para não usar JSON na documentação\n3. Mantive apenas instruções claras sobre os critérios"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+      "typeVersion": 1.2,
+      "position": [
+        -128,
+        144
+      ],
+      "id": "b887a30e-8a44-4a14-8948-e49f535fd9ca",
+      "name": "Analisa Pontuação",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "241f129e-fc3a-4e7c-b138-4422cffe3511",
+              "leftValue": "={{ $json.output.is_structured }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        208,
+        144
+      ],
+      "id": "c0e7fc2b-b679-460b-8774-934e4041ad70",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-4.1",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        -144,
+        288
+      ],
+      "id": "785ab5f7-638d-4d4e-970f-dad0b8049803",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "F4pE0jNeTTFbrt5N",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=#TEXTO:\n{{ $('setaData').item.json.roteiro }}\n\n#BLUEPRINT_ROTEIRO:\n{{ $json.prompt_roteiro }}",
+        "options": {
+          "systemMessage": "=# Agente de Inserção de Pontuação\n\n## Prompt do Agente\n\n```\nVocê é um especialista em inserção de pontuação em textos sem alterar o conteúdo original.\n\nTAREFA: Analisar o texto fornecido e inserir pontuação adequada baseando-se no blueprint estrutural fornecido.\n\nREGRAS FUNDAMENTAIS:\n1. NÃO altere, remova ou substitua NENHUMA palavra do texto original\n2. NÃO adicione palavras, frases ou conteúdo novo\n3. APENAS insira pontuação (. , ! ? : ; - ...)\n4. Mantenha a ordem exata das palavras\n5. Preserve quebras de linha e parágrafos existentes\n\nPROCESSO DE ANÁLISE:\n1. Leia o BLUEPRINT para entender:\n   - Estrutura narrativa esperada\n   - Tonalidade e contexto\n   - Padrões de ritmo e fluxo\n   - Momentos de ênfase e pausa\n\n2. Identifique no TEXTO:\n   - Frases completas que precisam de pontos finais\n   - Listas que precisam de vírgulas\n   - Perguntas que precisam de interrogações\n   - Exclamações que precisam de exclamações\n   - Pausas que precisam de vírgulas ou dois pontos\n\n3. Aplique pontuação seguindo:\n   - Lógica gramatical padrão\n   - Padrões identificados no blueprint\n   - Ritmo narrativo apropriado\n   - Clareza de leitura\n\nPONTUAÇÃO A INSERIR:\n- Pontos finais (.) para finalizar frases\n- Vírgulas (,) para separar elementos e pausas\n- Interrogações (?) para perguntas\n- Exclamações (!) para ênfase\n- Dois pontos (:) para introduzir listas ou explicações\n- Ponto e vírgula (;) para separar orações relacionadas\n\nSAÍDA:\n- Retorne APENAS o texto com pontuação inserida\n- NÃO inclua comentários, explicações ou análises\n- NÃO use aspas ou formatação adicional\n- O texto deve fluir naturalmente quando lido em voz alta\n\nEXEMPLO DE ENTRADA:\n#TEXTO:\nhey você está se sentindo perdido tudo parece dar errado mas saiba que uma nova porta vai se abrir\n\n#BLUEPRINT_ROTEIRO:\n[blueprint estrutural]\n\nEXEMPLO DE SAÍDA:\nHey, você está se sentindo perdido? Tudo parece dar errado, mas saiba que uma nova porta vai se abrir.\n```\n\n## Uso do Agente\n\nInput formato:\n```\n#TEXTO:\n[texto sem pontuação]\n\n#BLUEPRINT_ROTEIRO:\n[blueprint estrutural para contexto]\n```\n\nOutput: Texto com pontuação inserida, mantendo todas as palavras originais."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        112,
+        384
+      ],
+      "id": "ea42fe73-d610-42af-bd04-2e262e2f47d3",
+      "name": "AI Agent",
+      "retryOnFail": true
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-4.1",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        112,
+        544
+      ],
+      "id": "09c6c224-d6fd-49ae-8b53-982a97b3c6cd",
+      "name": "OpenRouter Chat Model1",
+      "credentials": {
+        "openRouterApi": {
+          "id": "F4pE0jNeTTFbrt5N",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "tableId": "canais",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "id",
+              "keyValue": "={{ $('setaData').item.json.id_canal }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        -32,
+        384
+      ],
+      "id": "6423e4d6-20b6-42ee-a65e-78eade2a80ac",
+      "name": "Get a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "oGUlDIJIN0NRUbWc",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "f812deb0-9436-4144-99d3-e2efe6bad0af",
+              "name": "roteiro_final",
+              "value": "={{ $('setaData').item.json.roteiro }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        384,
+        144
+      ],
+      "id": "11819d73-20c8-4454-9e19-4a8d36226175",
+      "name": "Define Roteiro"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "66f4b13f-5690-4417-bc02-57241d4f225a",
+              "name": "=roteiro_final",
+              "value": "={{ $json.output }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        384,
+        384
+      ],
+      "id": "ac99b273-3df8-46de-bdb2-423995cc4c50",
+      "name": "Define Roteiro2"
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        960,
+        272
+      ],
+      "id": "3aca16b6-d617-4ffa-9e96-6382208049ff",
+      "name": "Loop Over Items"
+    },
+    {
+      "parameters": {
+        "resource": "folder",
+        "bucketName": "audios",
+        "folderName": "temp",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        -176,
+        -96
+      ],
+      "id": "8b0978a2-6024-4954-b8be-53e100f29399",
+      "name": "Criar Pasta Temp",
+      "credentials": {
+        "s3": {
+          "id": "MooSYLbzepuRreoM",
+          "name": "S3 account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get many files2": {
+      "main": [
+        [
+          {
+            "node": "Code",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Coleta Lista Arquivos Final1": {
+      "main": [
+        [
+          {
+            "node": "Gera Lista URLs2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gera Lista URLs2": {
+      "main": [
+        [
+          {
+            "node": "concatenaAudio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "concatenaAudio": {
+      "main": [
+        [
+          {
+            "node": "setPath",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upload a file1": {
+      "main": [
+        [
+          {
+            "node": "Edit Fields",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code3": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "setParam": {
+      "main": [
+        [
+          {
+            "node": "Code3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Gera Audio FishAudio",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gera Audio Minimax",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Gerar Áudio ElevenLabs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gera Audio FishAudio": {
+      "main": [
+        [
+          {
+            "node": "Upload a file1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Coleta API Audio": {
+      "main": [
+        [
+          {
+            "node": "Executa Limpeza",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gerar Áudio ElevenLabs": {
+      "main": [
+        [
+          {
+            "node": "Upload a file1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Executa Limpeza": {
+      "main": [
+        [
+          {
+            "node": "Analisa Pontuação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Executa Limpeza1": {
+      "main": [
+        [
+          {
+            "node": "Update a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gerar Áudio": {
+      "main": [
+        [
+          {
+            "node": "Criar Pasta Temp",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "setaData": {
+      "main": [
+        [
+          {
+            "node": "Coleta API Audio",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Copy a file": {
+      "main": [
+        [
+          {
+            "node": "Delete a file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Delete a file": {
+      "main": [
+        [
+          {
+            "node": "Executa Limpeza1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "setPath": {
+      "main": [
+        [
+          {
+            "node": "Copy a file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update a row": {
+      "main": [
+        [
+          {
+            "node": "setSaida",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Edit Fields": {
+      "main": [
+        [
+          {
+            "node": "Loop Over Items",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Limite 1": {
+      "main": [
+        [
+          {
+            "node": "Coleta Lista Arquivos Final1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gera Audio Minimax": {
+      "main": [
+        [
+          {
+            "node": "Baixa Audio Minimax",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Baixa Audio Minimax": {
+      "main": [
+        [
+          {
+            "node": "Upload a file1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analisa Pontuação": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Define Roteiro",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Analisa Pontuação",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Define Roteiro2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get a row": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Define Roteiro": {
+      "main": [
+        [
+          {
+            "node": "setParam",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Define Roteiro2": {
+      "main": [
+        [
+          {
+            "node": "setParam",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Over Items": {
+      "main": [
+        [
+          {
+            "node": "Limite 1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Get many files2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Criar Pasta Temp": {
+      "main": [
+        [
+          {
+            "node": "setaData",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "1a0292d8-93b8-43fc-af38-b639fb40a25d",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "c6fbb6bd9dd871ca93aa227002d9065607edffcef72444963c91c9c146b6ac39"
+  },
+  "id": "vB6eNFjSPnsGPWZo",
+  "tags": []
+}

@@ -11,6 +11,7 @@ export interface ScriptData {
   file: File | null;
   type: 'text' | 'file';
   title: string;
+  thumbText: string;
 }
 
 export interface TrainingData {

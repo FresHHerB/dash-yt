@@ -32,9 +32,9 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
   const [trainingData, setTrainingData] = useState<TrainingData>({
     channelName: '',
     scripts: {
-      script1: { text: '', file: null, type: 'text', title: '' },
-      script2: { text: '', file: null, type: 'text', title: '' },
-      script3: { text: '', file: null, type: 'text', title: '' },
+      script1: { text: '', file: null, type: 'text', title: '', thumbText: '' },
+      script2: { text: '', file: null, type: 'text', title: '', thumbText: '' },
+      script3: { text: '', file: null, type: 'text', title: '', thumbText: '' },
     },
     model: 'GPT-5'
   });
@@ -309,10 +309,13 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
         nomeCanal: trainingData.channelName,
         titulo1: trainingData.scripts.script1.title,
         roteiro1: script1Content,
+        texto_thumb1: trainingData.scripts.script1.thumbText,
         titulo2: trainingData.scripts.script2.title,
         roteiro2: script2Content,
+        texto_thumb2: trainingData.scripts.script2.thumbText,
         titulo3: trainingData.scripts.script3.title,
         roteiro3: script3Content,
+        texto_thumb3: trainingData.scripts.script3.thumbText,
         modelo: trainingData.model
       };
 
@@ -329,6 +332,7 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
         const responseData = result[0] || result || {};
         const titlePrompt = responseData.prompt_titulo || 'Prompt de título não encontrado';
         const scriptPrompt = responseData.prompt_roteiro || 'Prompt de roteiro não encontrado';
+        const thumbPrompt = responseData.thumb_prompt || 'Prompt de thumb não encontrado';
         const canalId = responseData.id || null;
         
         setPromptData({ 
@@ -336,6 +340,7 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
           channelName: trainingData.channelName, 
           prompt_titulo: titlePrompt,
           prompt_roteiro: scriptPrompt,
+          thumb_prompt: thumbPrompt,
           media_chars: responseData.media_chars || null
         });
         setEditedTitlePrompt(titlePrompt);
@@ -353,9 +358,9 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
         setTrainingData({
           channelName: '',
           scripts: {
-            script1: { text: '', file: null, type: 'text', title: '' },
-            script2: { text: '', file: null, type: 'text', title: '' },
-            script3: { text: '', file: null, type: 'text', title: '' },
+            script1: { text: '', file: null, type: 'text', title: '', thumbText: '' },
+            script2: { text: '', file: null, type: 'text', title: '', thumbText: '' },
+            script3: { text: '', file: null, type: 'text', title: '', thumbText: '' },
           },
           model: 'GPT-5'
         });
@@ -881,7 +886,7 @@ const ScriptInputCard: React.FC<ScriptInputCardProps> = ({ title, script, onUpda
   };
 
   const clearContent = () => {
-    onUpdate({ text: '', file: null, type: 'text', title: '' });
+    onUpdate({ text: '', file: null, type: 'text', title: '', thumbText: '' });
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -961,6 +966,20 @@ const ScriptInputCard: React.FC<ScriptInputCardProps> = ({ title, script, onUpda
             value={script.title}
             onChange={(e) => onUpdate({ title: e.target.value })}
             placeholder="Digite o título do roteiro..."
+            className="w-full p-3 bg-black border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500"
+          />
+        </div>
+
+        {/* Thumb Text Field */}
+        <div className="space-y-2 mb-4">
+          <label className="block text-sm font-medium text-gray-300">
+            Texto da Thumb
+          </label>
+          <input
+            type="text"
+            value={script.thumbText}
+            onChange={(e) => onUpdate({ thumbText: e.target.value })}
+            placeholder="Digite o texto que aparece na thumbnail..."
             className="w-full p-3 bg-black border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500"
           />
         </div>

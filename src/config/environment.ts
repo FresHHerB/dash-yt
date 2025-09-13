@@ -11,7 +11,10 @@ export const env = {
     baseUrl: import.meta.env.VITE_WEBHOOK_BASE_URL || '',
     endpoints: {
       updatePrompts: import.meta.env.VITE_WEBHOOK_UPDATE_PROMPTS || '/webhook/updatePrompts',
-      generateContent: import.meta.env.VITE_WEBHOOK_GENERATE_CONTENT || '/webhook/gerarConteudo',
+      generateContent: import.meta.env.VITE_WEBHOOK_GENERATE_CONTENT || '/webhook/gerarConteudo', // Deprecated - manter para compatibilidade
+      generateScript: import.meta.env.VITE_WEBHOOK_GENERATE_SCRIPT || '/webhook-test/gerarRoteiro',
+      generateScriptAndAudio: import.meta.env.VITE_WEBHOOK_GENERATE_SCRIPT_AND_AUDIO || '/webhook/gerarRoteiroeAudio',
+      generateAudio: import.meta.env.VITE_WEBHOOK_GENERATE_AUDIO || '/webhook/gerarAudio',
       deleteScript: import.meta.env.VITE_WEBHOOK_DELETE_SCRIPT || '/webhook/excluirRoteiro',
       guideScript: import.meta.env.VITE_WEBHOOK_GUIDE_SCRIPT || '/webhook/guiaRoteiro',
     }

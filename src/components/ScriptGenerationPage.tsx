@@ -21,7 +21,9 @@ import {
   Plus,
   Video,
   Trash2,
-  Eye
+  Eye,
+  Zap,
+  Music
 } from 'lucide-react';
 import PageHeader from './shared/PageHeader';
 
@@ -50,6 +52,18 @@ interface ScriptGenerationPageProps {
   user: any;
   onBack: () => void;
   onNavigate?: (page: string) => void;
+}
+
+type WebhookMode = 'script' | 'script-audio' | 'audio';
+
+interface WebhookOption {
+  id: WebhookMode;
+  title: string;
+  description: string;
+  icon: any;
+  endpoint: keyof typeof env.webhooks.endpoints;
+  color: string;
+  requiresVoice: boolean;
 }
 
 interface SavedScript {
@@ -82,6 +96,7 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
   const [language, setLanguage] = useState('');
   const [selectedModel, setSelectedModel] = useState('');
   const [audioSpeed, setAudioSpeed] = useState(1.0);
+  const [selectedWebhookMode, setSelectedWebhookMode] = useState<WebhookMode>('script-audio');
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   
   // Estados para roteiros gerados (lista)
@@ -101,6 +116,39 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
 
   // Get selected channel
   const selectedChannel = channels.find(c => c.id === selectedChannelId);
+
+  // Webhook options configuration
+  const webhookOptions: WebhookOption[] = [
+    {
+      id: 'script',
+      title: 'Gerar Roteiro',
+      description: 'Gera apenas o roteiro de texto',
+      icon: FileText,
+      endpoint: 'generateScript',
+      color: 'from-blue-500 to-blue-600',
+      requiresVoice: false
+    },
+    {
+      id: 'script-audio',
+      title: 'Gerar Roteiro e Áudio',
+      description: 'Gera roteiro completo com narração',
+      icon: Mic,
+      endpoint: 'generateScriptAndAudio',
+      color: 'from-orange-500 to-orange-600',
+      requiresVoice: true
+    },
+    {
+      id: 'audio',
+      title: 'Gerar Áudio',
+      description: 'Função será definida posteriormente',
+      icon: Music,
+      endpoint: 'generateAudio',
+      color: 'from-purple-500 to-purple-600',
+      requiresVoice: true
+    }
+  ];
+
+  const selectedWebhookOption = webhookOptions.find(option => option.id === selectedWebhookMode)!;
 
   // Funções para gerenciar ideias
   const addScriptIdea = () => {
@@ -377,18 +425,27 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
     // Filtrar ideias não vazias
     const validIdeas = scriptIdeas.filter(idea => idea.trim());
     
-    if (!selectedChannelId || validIdeas.length === 0 || !language.trim() || !selectedModel.trim() || !selectedVoiceId) {
-      setMessage({ type: 'error', text: 'Selecione um canal, digite pelo menos uma ideia para o roteiro, especifique o idioma, escolha um modelo e selecione uma voz.' });
+    // Validação básica
+    if (!selectedChannelId || validIdeas.length === 0 || !language.trim() || !selectedModel.trim()) {
+      setMessage({ type: 'error', text: 'Selecione um canal, digite pelo menos uma ideia para o roteiro, especifique o idioma e escolha um modelo.' });
+      return;
+    }
+
+    // Validação específica para webhooks que requerem voz
+    if (selectedWebhookOption.requiresVoice && !selectedVoiceId) {
+      setMessage({ type: 'error', text: 'Para esta opção, é necessário selecionar uma voz.' });
       return;
     }
 
     const selectedChannel = channels.find(c => c.id === selectedChannelId);
-    const selectedVoice = voices.find(v => v.id === selectedVoiceId);
+    const selectedVoice = selectedVoiceId ? voices.find(v => v.id === selectedVoiceId) : null;
+    
     if (!selectedChannel) {
       setMessage({ type: 'error', text: 'Canal selecionado não encontrado.' });
       return;
     }
-    if (!selectedVoice) {
+    
+    if (selectedWebhookOption.requiresVoice && !selectedVoice) {
       setMessage({ type: 'error', text: 'Voz selecionada não encontrada.' });
       return;
     }
@@ -400,20 +457,30 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
     try {
       console.log('🚀 Iniciando geração de conteúdo...');
       
-      const payload = {
+      // Payload base para todos os webhooks
+      const basePayload = {
         id_canal: selectedChannelId,
         nome_canal: selectedChannel.nome_canal,
         nova_ideia: validIdeas,
         idioma: language,
-        modelo: selectedModel,
-        voiceId: selectedVoice.voice_id,
-        plataforma: selectedVoice.plataforma,
-        velocidade: audioSpeed
+        modelo: selectedModel
       };
 
-      console.log('📤 Payload enviado:', payload);
+      // Adicionar dados de voz apenas se necessário
+      const payload = selectedWebhookOption.requiresVoice && selectedVoice 
+        ? {
+            ...basePayload,
+            voiceId: selectedVoice.voice_id,
+            plataforma: selectedVoice.plataforma,
+            velocidade: audioSpeed
+          }
+        : basePayload;
 
-      const response = await fetch(buildWebhookUrl('generateContent'), {
+      console.log('📤 Payload enviado:', payload);
+      console.log('🎯 Webhook selecionado:', selectedWebhookOption.title);
+      console.log('🔗 Endpoint:', selectedWebhookOption.endpoint);
+
+      const response = await fetch(buildWebhookUrl(selectedWebhookOption.endpoint), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -431,7 +498,7 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
         // Processar lista de roteiros gerados
         if (Array.isArray(result) && result.length > 0) {
           setGeneratedScripts(result);
-          setMessage({ type: 'success', text: `${result.length} roteiro${result.length > 1 ? 's' : ''} gerado${result.length > 1 ? 's' : ''} com sucesso!` });
+          setMessage({ type: 'success', text: `${result.length} roteiro${result.length > 1 ? 's' : ''} ${selectedWebhookOption.id === 'script' ? 'gerado' : 'gerado com áudio'}${result.length > 1 ? 's' : ''} com sucesso!` });
         } else {
           throw new Error('Nenhum roteiro foi gerado');
         }
@@ -648,11 +715,69 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
           {/* Script Generation */}
           <div className="bg-gray-900/50 backdrop-blur-xl rounded-2xl border border-gray-800 p-8">
             <div className="mb-6">
-              <h2 className="text-2xl font-light text-white mb-2">Configuração do Conteúdo</h2>
-              <p className="text-gray-400 text-sm">Configure as ideias, idioma, modelo e voz para gerar conteúdo completo</p>
+              <h2 className="text-2xl font-light text-white mb-2">Configuração de Geração</h2>
+              <p className="text-gray-400 text-sm">Configure o tipo de geração, ideias, idioma e modelo</p>
             </div>
             
-            <div className="space-y-4">
+            <div className="space-y-6">
+              {/* Webhook Mode Selector */}
+              <div className="space-y-3">
+                <label className="block text-sm font-medium text-gray-300">
+                  Tipo de Geração
+                </label>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {webhookOptions.map((option) => {
+                    const IconComponent = option.icon;
+                    const isSelected = selectedWebhookMode === option.id;
+                    const isDisabled = option.id === 'audio'; // Temporariamente desabilitado
+                    
+                    return (
+                      <button
+                        key={option.id}
+                        onClick={() => !isDisabled && setSelectedWebhookMode(option.id)}
+                        disabled={isDisabled}
+                        className={`
+                          relative p-4 rounded-xl border-2 transition-all duration-300 text-left
+                          ${isSelected 
+                            ? `bg-gradient-to-r ${option.color} border-transparent text-white shadow-lg scale-105` 
+                            : isDisabled
+                            ? 'bg-gray-800/30 border-gray-700 text-gray-500 cursor-not-allowed opacity-50'
+                            : 'bg-gray-800/50 border-gray-700 text-gray-300 hover:border-gray-600 hover:bg-gray-800/70'
+                          }
+                        `}
+                      >
+                        <div className="flex items-start space-x-3">
+                          <div className={`
+                            w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0
+                            ${isSelected ? 'bg-white/20' : 'bg-gray-700'}
+                          `}>
+                            <IconComponent className={`w-5 h-5 ${isSelected ? 'text-white' : 'text-gray-400'}`} />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className={`font-medium mb-1 ${isSelected ? 'text-white' : 'text-gray-300'}`}>
+                              {option.title}
+                            </h3>
+                            <p className={`text-sm ${isSelected ? 'text-white/80' : 'text-gray-400'}`}>
+                              {option.description}
+                            </p>
+                            {isDisabled && (
+                              <p className="text-xs text-gray-500 mt-1 italic">
+                                Em breve
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {isSelected && (
+                          <div className="absolute top-2 right-2">
+                            <div className="w-3 h-3 bg-white rounded-full"></div>
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-300">
                   Idioma
@@ -730,108 +855,126 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
               </div>
 
               {/* Voice Selection */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-300">
-                  Voz para Áudio
-                </label>
-                {isLoadingVoices ? (
-                  <div className="flex items-center space-x-2 p-4 bg-gray-800 border border-gray-600 rounded-xl">
-                    <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
-                    <span className="text-gray-400 text-sm">Carregando vozes...</span>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <select
-                      value={selectedVoiceId || ''}
-                      onChange={(e) => setSelectedVoiceId(e.target.value ? parseInt(e.target.value) : null)}
-                      className="w-full p-4 bg-black border border-gray-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all duration-200 text-white"
-                    >
-                      <option value="">Selecione uma voz</option>
-                      {voices.map((voice) => (
-                        <option key={voice.id} value={voice.id}>
-                          {voice.nome_voz} - {voice.plataforma}
-                          {voice.idioma && ` (${voice.idioma})`}
-                        </option>
-                      ))}
-                    </select>
-                    
-                    {/* Voice Preview Button */}
-                    {selectedVoiceId && (
-                      <button
-                        onClick={playSelectedVoicePreview}
-                        disabled={selectedVoiceId ? testingVoices.has(selectedVoiceId) : false}
-                        className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm transition-all duration-200 ${
-                          selectedVoiceId && testingVoices.has(selectedVoiceId)
-                            ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                            : isAudioPlaying(`voice-preview-${selectedVoiceId}`)
-                            ? 'bg-red-600 hover:bg-red-700 text-white'
-                            : 'bg-green-600 hover:bg-green-700 text-white'
-                        }`}
+              {selectedWebhookOption.requiresVoice && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-300">
+                    Voz para Áudio
+                  </label>
+                  {isLoadingVoices ? (
+                    <div className="flex items-center space-x-2 p-4 bg-gray-800 border border-gray-600 rounded-xl">
+                      <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                      <span className="text-gray-400 text-sm">Carregando vozes...</span>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <select
+                        value={selectedVoiceId || ''}
+                        onChange={(e) => setSelectedVoiceId(e.target.value ? parseInt(e.target.value) : null)}
+                        className="w-full p-4 bg-black border border-gray-700 rounded-xl focus:ring-2 focus:ring-orange-500 focus:border-orange-500 outline-none transition-all duration-200 text-white"
                       >
-                        {selectedVoiceId && testingVoices.has(selectedVoiceId) ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Carregando...</span>
-                          </>
-                        ) : isAudioPlaying(`voice-preview-${selectedVoiceId}`) ? (
-                          <>
-                            <Square className="w-4 h-4" />
-                            <span>Parar</span>
-                          </>
-                        ) : (
-                          <>
-                            <Play className="w-4 h-4" />
-                            <span>Testar Voz</span>
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
+                        <option value="">Selecione uma voz</option>
+                        {voices.map((voice) => (
+                          <option key={voice.id} value={voice.id}>
+                            {voice.nome_voz} - {voice.plataforma}
+                            {voice.idioma && ` (${voice.idioma})`}
+                          </option>
+                        ))}
+                      </select>
+                      
+                      {/* Voice Preview Button */}
+                      {selectedVoiceId && (
+                        <button
+                          onClick={playSelectedVoicePreview}
+                          disabled={selectedVoiceId ? testingVoices.has(selectedVoiceId) : false}
+                          className={`flex items-center space-x-2 px-4 py-2 rounded-lg text-sm transition-all duration-200 ${
+                            selectedVoiceId && testingVoices.has(selectedVoiceId)
+                              ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                              : isAudioPlaying(`voice-preview-${selectedVoiceId}`)
+                              ? 'bg-red-600 hover:bg-red-700 text-white'
+                              : 'bg-green-600 hover:bg-green-700 text-white'
+                          }`}
+                        >
+                          {selectedVoiceId && testingVoices.has(selectedVoiceId) ? (
+                            <>
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <span>Carregando...</span>
+                            </>
+                          ) : isAudioPlaying(`voice-preview-${selectedVoiceId}`) ? (
+                            <>
+                              <Square className="w-4 h-4" />
+                              <span>Parar</span>
+                            </>
+                          ) : (
+                            <>
+                              <Play className="w-4 h-4" />
+                              <span>Testar Voz</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Audio Speed */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-300">
-                  Velocidade do Áudio: {audioSpeed}x
-                </label>
-                <input
-                  type="range"
-                  min="0.8"
-                  max="1.2"
-                  step="0.1"
-                  value={audioSpeed}
-                  onChange={(e) => setAudioSpeed(parseFloat(e.target.value))}
-                  className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
-                />
-                <div className="flex justify-between text-xs text-gray-400">
-                  <span>0.8x (Lento)</span>
-                  <span>1.0x (Normal)</span>
-                  <span>1.2x (Rápido)</span>
+              {selectedWebhookOption.requiresVoice && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-300">
+                    Velocidade do Áudio: {audioSpeed}x
+                  </label>
+                  <input
+                    type="range"
+                    min="0.8"
+                    max="1.2"
+                    step="0.1"
+                    value={audioSpeed}
+                    onChange={(e) => setAudioSpeed(parseFloat(e.target.value))}
+                    className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
+                  />
+                  <div className="flex justify-between text-xs text-gray-400">
+                    <span>0.8x (Lento)</span>
+                    <span>1.0x (Normal)</span>
+                    <span>1.2x (Rápido)</span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               <div className="flex justify-center">
                 <button
                   onClick={generateContent}
-                  disabled={!selectedChannelId || scriptIdeas.filter(idea => idea.trim()).length === 0 || !language.trim() || !selectedModel.trim() || !selectedVoiceId || isGeneratingContent}
+                  disabled={
+                    !selectedChannelId || 
+                    scriptIdeas.filter(idea => idea.trim()).length === 0 || 
+                    !language.trim() || 
+                    !selectedModel.trim() || 
+                    (selectedWebhookOption.requiresVoice && !selectedVoiceId) ||
+                    isGeneratingContent ||
+                    selectedWebhookMode === 'audio' // Temporariamente desabilitado
+                  }
                   className={`
                     flex items-center space-x-3 px-8 py-4 rounded-xl font-medium transition-all duration-300 transform
-                    ${!selectedChannelId || scriptIdeas.filter(idea => idea.trim()).length === 0 || !language.trim() || !selectedModel.trim() || !selectedVoiceId || isGeneratingContent
+                    ${!selectedChannelId || 
+                      scriptIdeas.filter(idea => idea.trim()).length === 0 || 
+                      !language.trim() || 
+                      !selectedModel.trim() || 
+                      (selectedWebhookOption.requiresVoice && !selectedVoiceId) ||
+                      isGeneratingContent ||
+                      selectedWebhookMode === 'audio'
                       ? 'bg-gray-800 text-gray-600 cursor-not-allowed border border-gray-700'
-                      : 'bg-orange-600 text-white hover:bg-orange-700 hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl'
+                      : `bg-gradient-to-r ${selectedWebhookOption.color} text-white hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl`
                     }
                   `}
                 >
                   {isGeneratingContent ? (
                     <>
                       <Loader2 className="w-5 h-5 animate-spin" />
-                      <span>Gerando Conteúdo...</span>
+                      <span>Gerando...</span>
                     </>
                   ) : (
                     <>
-                      <Wand2 className="w-5 h-5" />
-                      <span>Gerar Conteúdo</span>
+                      {React.createElement(selectedWebhookOption.icon, { className: "w-5 h-5" })}
+                      <span>{selectedWebhookOption.title}</span>
                     </>
                   )}
                 </button>

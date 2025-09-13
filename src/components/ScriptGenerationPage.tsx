@@ -487,11 +487,18 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
       const response = await fetch(buildWebhookUrl(selectedWebhookOption.endpoint), {
         method: 'POST',
         headers: {
-            hasAudio: generationType === 'scriptAndAudio' && !!item.audio_url,
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify(payload),
-        });
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('📥 Resposta recebida:', result);
+        
         let responseArray: any[] = [];
+        let processedScripts: GeneratedScript[] = [];
+        let successMessage = '';
         
         console.log('📦 Quantidade de scripts processados:', processedScripts.length);
         // Garantir que temos um array para processar
@@ -503,18 +510,38 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
         } else {
           throw new Error('Formato de resposta inesperado');
         }
-            successMessage = count === 1 ? 'Roteiro gerado com sucesso!' : `${count} roteiros gerados com sucesso!`;
+
         console.log('📦 Array para processar:', responseArray);
-            successMessage = count === 1 ? 'Roteiro e áudio gerados com sucesso!' : `${count} roteiros e áudios gerados com sucesso!`;
         
-            successMessage = count === 1 ? 'Áudio gerado com sucesso!' : `${count} áudios gerados com sucesso!`;
         processedScripts = responseArray.map((item: any, index: number) => {
           console.log(`🔍 Processando item ${index + 1}:`, item);
           
+          const generationType = selectedWebhookMode;
+          const count = responseArray.length;
+          
+          if (generationType === 'script') {
+            successMessage = count === 1 ? 'Roteiro gerado com sucesso!' : `${count} roteiros gerados com sucesso!`;
+          } else if (generationType === 'script-audio') {
+            successMessage = count === 1 ? 'Roteiro e áudio gerados com sucesso!' : `${count} roteiros e áudios gerados com sucesso!`;
+          } else if (generationType === 'audio') {
+            successMessage = count === 1 ? 'Áudio gerado com sucesso!' : `${count} áudios gerados com sucesso!`;
+          }
+          
           console.log('✅ Mensagem de sucesso definida:', successMessage);
           console.log('✅ Estado generatedScripts atualizado com', processedScripts.length, 'itens');
-          return {
           console.log('❌ Nenhum script foi processado');
+          return {
+            titulo: item.titulo || 'Título não disponível',
+            roteiro: item.roteiro || '',
+            id_roteiro: item.id_roteiro || `${Date.now()}-${index}`,
+            audio_path: item.audio_path || ''
+          };
+        });
+
+        if (processedScripts.length > 0) {
+          setGeneratedScripts(processedScripts);
+          setMessage({ type: 'success', text: successMessage });
+        } else {
         }
         setScriptIdeas(['']);
       } else {

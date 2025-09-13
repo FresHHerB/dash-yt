@@ -57,8 +57,7 @@ const GeneratedScriptsPage: React.FC<GeneratedScriptsPageProps> = ({ user, onBac
   const [deletingScripts, setDeletingScripts] = useState<Set<number>>(new Set());
   const [scriptToDelete, setScriptToDelete] = useState<{ script: Script; channel: Channel } | null>(null);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [editingScript, setEditingScript] = useState<Script | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [editedTitle, setEditedTitle] = useState('');
   const [editedScriptContent, setEditedScriptContent] = useState('');
   const [isUpdatingContent, setIsUpdatingContent] = useState(false);
@@ -249,30 +248,24 @@ const GeneratedScriptsPage: React.FC<GeneratedScriptsPageProps> = ({ user, onBac
   };
 
   const openEditModal = (script: Script) => {
-    setEditingScript(script);
+    // Usar o modal de detalhes unificado em modo de edição
+    setSelectedScript(script);
+    setSelectedChannel(channelsWithScripts.find(c => c.id === script.canal_id) || null);
+    setIsEditMode(true);
     setEditedTitle(script.titulo || '');
     setEditedScriptContent(script.roteiro);
-    setShowEditModal(true);
-    setEditModalMessage(null);
-  };
-
-  const closeEditModal = () => {
-    setEditingScript(null);
-    setShowEditModal(false);
-    setEditedTitle('');
-    setEditedScriptContent('');
     setEditModalMessage(null);
   };
 
   const updateContent = async () => {
-    if (!editingScript) return;
+    if (!selectedScript) return;
 
     setIsUpdatingContent(true);
     setEditModalMessage(null);
 
     try {
       const payload = {
-        id_roteiro: editingScript.id,
+        id_roteiro: selectedScript.id,
         titulo_editado: editedTitle,
         roteiro_editado: editedScriptContent
       };
@@ -297,22 +290,23 @@ const GeneratedScriptsPage: React.FC<GeneratedScriptsPageProps> = ({ user, onBac
         setChannelsWithScripts(prev => prev.map(channel => ({
           ...channel,
           scripts: channel.scripts.map(script => 
-            script.id === editingScript.id 
+            script.id === selectedScript.id 
               ? { ...script, titulo: editedTitle, roteiro: editedScriptContent }
               : script
           )
         })));
         
         // Atualizar também o script selecionado se estiver aberto
-        if (selectedScript && selectedScript.id === editingScript.id) {
+        if (selectedScript && selectedScript.id === selectedScript.id) {
           setSelectedScript({ ...selectedScript, titulo: editedTitle, roteiro: editedScriptContent });
         }
         
         setEditModalMessage({ type: 'success', text: 'Conteúdo atualizado com sucesso!' });
         
-        // Fechar modal após 2 segundos
+        // Sair do modo de edição após 2 segundos
         setTimeout(() => {
-          closeEditModal();
+          setIsEditMode(false);
+          setEditModalMessage(null);
         }, 2000);
       } else {
         throw new Error(`Erro ${response.status}: ${response.statusText}`);
@@ -328,6 +322,10 @@ const GeneratedScriptsPage: React.FC<GeneratedScriptsPageProps> = ({ user, onBac
   const closeModal = () => {
     setSelectedScript(null);
     setSelectedChannel(null);
+    setIsEditMode(false);
+    setEditedTitle('');
+    setEditedScriptContent('');
+    setEditModalMessage(null);
     if (playingAudio) {
       pauseAudio();
     }
@@ -561,133 +559,29 @@ const GeneratedScriptsPage: React.FC<GeneratedScriptsPageProps> = ({ user, onBac
         </div>
       )}
 
-      {/* Edit Script Modal */}
-      {showEditModal && editingScript && (
-        <div 
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 z-50"
-          onClick={closeEditModal}
-        >
-          <div 
-            className="bg-gray-900 rounded-2xl border border-gray-700 w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-gray-700 flex-shrink-0">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center">
-                  <Edit3 className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-xl font-medium text-white">Editar Roteiro</h2>
-                  <p className="text-sm text-gray-400">ID: #{editingScript.id}</p>
-                </div>
-              </div>
-              <button
-                onClick={closeEditModal}
-                className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all duration-200"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            {/* Modal Content */}
-            <div className="p-6 flex-1 overflow-y-auto">
-              {/* Success/Error Message */}
-              {editModalMessage && (
-                <div className={`mb-6 p-4 rounded-xl text-center border ${
-                  editModalMessage.type === 'success' 
-                    ? 'bg-green-900/20 text-green-400 border-green-800' 
-                    : 'bg-red-900/20 text-red-400 border-red-800'
-                }`}>
-                  <div className="flex items-center justify-center space-x-2">
-                    {editModalMessage.type === 'success' ? (
-                      <CheckCircle className="w-5 h-5" />
-                    ) : (
-                      <X className="w-5 h-5" />
-                    )}
-                    <span className="font-medium">{editModalMessage.text}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Title Field */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Título
-                </label>
-                <input
-                  type="text"
-                  value={editedTitle}
-                  onChange={(e) => setEditedTitle(e.target.value)}
-                  className="w-full p-4 bg-black border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500"
-                  placeholder="Digite o título do roteiro..."
-                />
-                <div className="text-xs text-gray-400 mt-1">
-                  {editedTitle.length} caracteres
-                </div>
-              </div>
-
-              {/* Script Field */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Roteiro
-                </label>
-                <textarea
-                  value={editedScriptContent}
-                  onChange={(e) => setEditedScriptContent(e.target.value)}
-                  rows={12}
-                  className="w-full p-4 bg-black border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500 resize-none"
-                  placeholder="Digite o conteúdo do roteiro..."
-                />
-                <div className="text-xs text-gray-400 mt-1">
-                  {editedScriptContent.length.toLocaleString()} caracteres
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-700 flex-shrink-0">
-              <button
-                onClick={closeEditModal}
-                disabled={isUpdatingContent}
-                className="px-6 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all duration-200 disabled:opacity-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={updateContent}
-                disabled={isUpdatingContent || !editedTitle.trim() || !editedScriptContent.trim()}
-                className={`
-                  flex items-center space-x-2 px-6 py-2 rounded-lg font-medium transition-all duration-200
-                  ${isUpdatingContent || !editedTitle.trim() || !editedScriptContent.trim()
-                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white'
-                  }
-                `}
-              >
-                {isUpdatingContent ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Atualizando...</span>
-                  </>
-                ) : (
-                  <>
-                    <CheckCircle className="w-4 h-4" />
-                    <span>Atualizar Conteúdo</span>
-                  </>
-                )}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Script Detail Modal */}
       {selectedScript && selectedChannel && (
         <ScriptDetailModal
           script={selectedScript}
           channel={selectedChannel}
+          isEditMode={isEditMode}
+          editedTitle={editedTitle}
+          editedScriptContent={editedScriptContent}
+          editModalMessage={editModalMessage}
+          isUpdatingContent={isUpdatingContent}
           onClose={closeModal}
+          onToggleEditMode={() => {
+            if (!isEditMode) {
+              setEditedTitle(selectedScript.titulo || '');
+              setEditedScriptContent(selectedScript.roteiro);
+              setEditModalMessage(null);
+            }
+            setIsEditMode(!isEditMode);
+          }}
+          onTitleChange={setEditedTitle}
+          onScriptChange={setEditedScriptContent}
+          onUpdateContent={updateContent}
           onPlayAudio={playAudio}
           onPauseAudio={pauseAudio}
           onDownloadAudio={downloadAudio}
@@ -964,7 +858,16 @@ const ScriptCard: React.FC<ScriptCardProps> = ({
 interface ScriptDetailModalProps {
   script: Script;
   channel: Channel;
+  isEditMode: boolean;
+  editedTitle: string;
+  editedScriptContent: string;
+  editModalMessage: { type: 'success' | 'error'; text: string } | null;
+  isUpdatingContent: boolean;
   onClose: () => void;
+  onToggleEditMode: () => void;
+  onTitleChange: (title: string) => void;
+  onScriptChange: (script: string) => void;
+  onUpdateContent: () => void;
   onPlayAudio: (audioUrl: string, audioId: string) => void;
   onPauseAudio: () => void;
   onDownloadAudio: (script: Script) => void;
@@ -976,7 +879,16 @@ interface ScriptDetailModalProps {
 const ScriptDetailModal: React.FC<ScriptDetailModalProps> = ({
   script,
   channel,
+  isEditMode,
+  editedTitle,
+  editedScriptContent,
+  editModalMessage,
+  isUpdatingContent,
   onClose,
+  onToggleEditMode,
+  onTitleChange,
+  onScriptChange,
+  onUpdateContent,
   onPlayAudio,
   onPauseAudio,
   onDownloadAudio,
@@ -1019,11 +931,15 @@ const ScriptDetailModal: React.FC<ScriptDetailModalProps> = ({
         {/* Modal Header */}
         <div className="flex items-center justify-between p-6 border-b border-gray-700 flex-shrink-0">
           <div className="flex items-center space-x-3">
-            <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center">
-              <FileText className="w-6 h-6 text-white" />
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+              isEditMode ? 'bg-blue-500' : 'bg-green-500'
+            }`}>
+              {isEditMode ? <Edit3 className="w-6 h-6 text-white" /> : <FileText className="w-6 h-6 text-white" />}
             </div>
             <div>
-              <h2 className="text-xl font-medium text-white">Detalhes do Roteiro</h2>
+              <h2 className="text-xl font-medium text-white">
+                {isEditMode ? 'Editar Roteiro' : 'Detalhes do Roteiro'}
+              </h2>
               <p className="text-sm text-gray-400">{channel.nome_canal} • #{script.id}</p>
             </div>
           </div>
@@ -1037,43 +953,95 @@ const ScriptDetailModal: React.FC<ScriptDetailModalProps> = ({
 
         {/* Modal Content */}
         <div className="p-6 flex-1 overflow-y-auto">
+          {/* Success/Error Message */}
+          {editModalMessage && (
+            <div className={`mb-6 p-4 rounded-xl text-center border ${
+              editModalMessage.type === 'success' 
+                ? 'bg-green-900/20 text-green-400 border-green-800' 
+                : 'bg-red-900/20 text-red-400 border-red-800'
+            }`}>
+              <div className="flex items-center justify-center space-x-2">
+                {editModalMessage.type === 'success' ? (
+                  <CheckCircle className="w-5 h-5" />
+                ) : (
+                  <X className="w-5 h-5" />
+                )}
+                <span className="font-medium">{editModalMessage.text}</span>
+              </div>
+            </div>
+          )}
+
           {/* Title Section */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-lg font-medium text-gray-300">Título</h3>
-              <button
-                onClick={() => copyToClipboard(script.titulo || '')}
-                className="text-gray-400 hover:text-white text-sm"
-              >
-                Copiar
-              </button>
+              {!isEditMode && (
+                <button
+                  onClick={() => copyToClipboard(script.titulo || '')}
+                  className="text-gray-400 hover:text-white text-sm"
+                >
+                  Copiar
+                </button>
+              )}
             </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
-              <p className="text-white">{script.titulo || 'Sem título'}</p>
-            </div>
+            {isEditMode ? (
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={editedTitle}
+                  onChange={(e) => onTitleChange(e.target.value)}
+                  className="w-full p-4 bg-black border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500"
+                  placeholder="Digite o título do roteiro..."
+                />
+                <div className="text-xs text-gray-400">
+                  {editedTitle.length} caracteres
+                </div>
+              </div>
+            ) : (
+              <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+                <p className="text-white">{script.titulo || 'Sem título'}</p>
+              </div>
+            )}
           </div>
 
           {/* Script Section */}
           <div className="mb-6">
             <div className="flex items-center justify-between mb-2">
               <h3 className="text-lg font-medium text-gray-300">Roteiro</h3>
-              <div className="flex items-center space-x-3">
-                <span className="text-sm text-gray-400">{script.roteiro.length} caracteres</span>
-                <button
-                  onClick={() => copyToClipboard(script.roteiro)}
-                  className="text-gray-400 hover:text-white text-sm"
-                >
-                  Copiar
-                </button>
+              {!isEditMode && (
+                <div className="flex items-center space-x-3">
+                  <span className="text-sm text-gray-400">{script.roteiro.length} caracteres</span>
+                  <button
+                    onClick={() => copyToClipboard(script.roteiro)}
+                    className="text-gray-400 hover:text-white text-sm"
+                  >
+                    Copiar
+                  </button>
+                </div>
+              )}
+            </div>
+            {isEditMode ? (
+              <div className="space-y-2">
+                <textarea
+                  value={editedScriptContent}
+                  onChange={(e) => onScriptChange(e.target.value)}
+                  rows={12}
+                  className="w-full p-4 bg-black border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500 resize-none"
+                  placeholder="Digite o conteúdo do roteiro..."
+                />
+                <div className="text-xs text-gray-400">
+                  {editedScriptContent.length.toLocaleString()} caracteres
+                </div>
               </div>
-            </div>
-            <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4 max-h-64 overflow-y-auto">
-              <p className="text-white whitespace-pre-wrap leading-relaxed">{script.roteiro}</p>
-            </div>
+            ) : (
+              <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4 max-h-64 overflow-y-auto">
+                <p className="text-white whitespace-pre-wrap leading-relaxed">{script.roteiro}</p>
+              </div>
+            )}
           </div>
 
           {/* Audio Section */}
-          {hasAudio && (
+          {hasAudio && !isEditMode && (
             <div className="mb-6">
               <h3 className="text-lg font-medium text-gray-300 mb-2">Áudio</h3>
               <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
@@ -1132,7 +1100,8 @@ const ScriptDetailModal: React.FC<ScriptDetailModalProps> = ({
           )}
 
           {/* Metadata */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {!isEditMode && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
               <h4 className="text-sm font-medium text-gray-300 mb-2">Informações</h4>
               <div className="space-y-2 text-sm">
@@ -1169,16 +1138,61 @@ const ScriptDetailModal: React.FC<ScriptDetailModalProps> = ({
               </div>
             </div>
           </div>
+          )}
         </div>
 
         {/* Modal Footer */}
         <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-700 flex-shrink-0">
+          {isEditMode ? (
+            <>
+              <button
+                onClick={onToggleEditMode}
+                disabled={isUpdatingContent}
+                className="px-6 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all duration-200 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={onUpdateContent}
+                disabled={isUpdatingContent || !editedTitle.trim() || !editedScriptContent.trim()}
+                className={`
+                  flex items-center space-x-2 px-6 py-2 rounded-lg font-medium transition-all duration-200
+                  ${isUpdatingContent || !editedTitle.trim() || !editedScriptContent.trim()
+                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  }
+                `}
+              >
+                {isUpdatingContent ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Atualizando...</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle className="w-4 h-4" />
+                    <span>Atualizar Conteúdo</span>
+                  </>
+                )}
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                onClick={onToggleEditMode}
+                className="flex items-center space-x-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all duration-200"
+              >
+                <Edit3 className="w-4 h-4" />
+                <span>Editar</span>
+              </button>
           <button
             onClick={onClose}
             className="px-6 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all duration-200"
           >
             Fechar
           </button>
+            </>
+          )}
         </div>
       </div>
     </div>

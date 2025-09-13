@@ -17,6 +17,7 @@ export const env = {
       generateAudio: import.meta.env.VITE_WEBHOOK_GENERATE_AUDIO || '/webhook/gerarAudio',
       deleteScript: import.meta.env.VITE_WEBHOOK_DELETE_SCRIPT || '/webhook/excluirRoteiro',
       guideScript: import.meta.env.VITE_WEBHOOK_GUIDE_SCRIPT || '/webhook/guiaRoteiro',
+      updateContent: import.meta.env.VITE_WEBHOOK_UPDATE_CONTENT || '/webhook-test/atualizarConteudo',
     }
   },
 

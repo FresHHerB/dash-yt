@@ -177,15 +177,11 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
             'Content-Type': 'application/json',
           },
           body: JSON.stringify(payload),
-          // Adicionar timeout para evitar travamento
-          signal: AbortSignal.timeout(30000) // 30 segundos
         });
       } catch (fetchError) {
         console.error('❌ [TRAINING] Erro de conectividade:', fetchError);
         
-        if (fetchError.name === 'TimeoutError') {
-          throw new Error('Timeout: O serviço N8N não respondeu em 30 segundos. Verifique se o serviço está rodando.');
-        } else if (fetchError.message.includes('Failed to fetch')) {
+        if (fetchError.message.includes('Failed to fetch')) {
           throw new Error(`Não foi possível conectar ao serviço N8N. Verifique se:\n• O serviço N8N está rodando\n• A URL está correta: ${webhookUrl}\n• Não há bloqueios de firewall ou proxy`);
         } else {
           throw new Error(`Erro de rede: ${fetchError.message}`);

@@ -141,6 +141,14 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
     setMessage(null);
 
     try {
+      // Verificar se as variáveis de ambiente estão configuradas
+      const webhookUrl = buildWebhookUrl('generateContent');
+      console.log('🔗 [TRAINING] URL do webhook:', webhookUrl);
+      
+      if (!webhookUrl || webhookUrl.includes('undefined')) {
+        throw new Error('URL do webhook não está configurada corretamente. Verifique as variáveis de ambiente VITE_WEBHOOK_BASE_URL e VITE_WEBHOOK_GENERATE_CONTENT no arquivo .env');
+      }
+
       // Construir payload dinamicamente
       const payload: any = {
         nome_canal: trainingData.channelName,
@@ -158,13 +166,28 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
 
       console.log('📤 Enviando dados de treinamento:', payload);
 
-      const response = await fetch(buildWebhookUrl('generateContent'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
-      });
+      let response;
+      try {
+        response = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+          // Adicionar timeout para evitar travamento
+          signal: AbortSignal.timeout(30000) // 30 segundos
+        });
+      } catch (fetchError) {
+        console.error('❌ [TRAINING] Erro de conectividade:', fetchError);
+        
+        if (fetchError.name === 'TimeoutError') {
+          throw new Error('Timeout: O serviço N8N não respondeu em 30 segundos. Verifique se o serviço está rodando.');
+        } else if (fetchError.message.includes('Failed to fetch')) {
+          throw new Error(`Não foi possível conectar ao serviço N8N. Verifique se:\n• O serviço N8N está rodando\n• A URL está correta: ${webhookUrl}\n• Não há bloqueios de firewall ou proxy`);
+        } else {
+          throw new Error(`Erro de rede: ${fetchError.message}`);
+        }
+      }
 
       console.log('📡 Response status:', response.status);
 
@@ -183,11 +206,29 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
           model: 'GPT-4.1-mini'
         });
       } else {
-        throw new Error(`Erro ${response.status}: ${response.statusText}`);
+        let errorMessage = `Erro ${response.status}: ${response.statusText}`;
+        
+        try {
+          const errorData = await response.text();
+          if (errorData) {
+            errorMessage += `\nDetalhes: ${errorData}`;
+          }
+        } catch (e) {
+          // Ignorar erro ao ler resposta
+        }
+        
+        throw new Error(errorMessage);
       }
     } catch (error) {
       console.error('❌ Erro no treinamento:', error);
-      setMessage({ type: 'error', text: 'Erro ao treinar canal. Tente novamente.' });
+      
+      let errorMessage = 'Erro ao treinar canal. Tente novamente.';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      setMessage({ type: 'error', text: errorMessage });
     } finally {
       setIsTraining(false);
     }
@@ -215,7 +256,14 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
               ) : (
                 <AlertCircle className="w-5 h-5" />
               )}
-              <span className="font-medium">{message.text}</span>
+              <div className="text-left">
+                <div className="font-medium whitespace-pre-line">{message.text}</div>
+                {message.type === 'error' && (
+                  <div className="text-xs mt-2 opacity-75">
+                    Verifique o console do navegador (F12) para mais detalhes técnicos.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}

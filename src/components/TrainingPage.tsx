@@ -26,7 +26,7 @@ interface ScriptData {
 interface TrainingData {
   channelName: string;
   scripts: ScriptData[];
-  model: 'GPT-5' | 'GPT-4.1-mini' | 'Sonnet-4' | 'Gemini-2.5-Pro';
+  model: 'GPT-5' | 'GPT-4.1-mini' | 'Sonnet-4' | 'Gemini-2.5-Pro' | 'Gemini-2.5-Flash';
 }
 
 interface TrainingPageProps {

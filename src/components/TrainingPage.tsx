@@ -142,7 +142,7 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
 
     try {
       // Verificar se as variáveis de ambiente estão configuradas
-      const webhookUrl = buildWebhookUrl('generateContent');
+      const webhookUrl = buildWebhookUrl('trainChannel');
       console.log('🔗 [TRAINING] URL do webhook:', webhookUrl);
       
       if (!webhookUrl || webhookUrl.includes('undefined')) {

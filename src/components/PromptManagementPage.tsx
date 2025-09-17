@@ -888,16 +888,6 @@ const ChannelCard: React.FC<ChannelCardProps> = ({ channel, onEdit, onDelete, is
     });
   };
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
   const hasPrompt = channel.prompt_roteiro && channel.prompt_roteiro.trim().length > 0;
 
   const handleDeleteClick = (e: React.MouseEvent) => {

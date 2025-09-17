@@ -12,6 +12,7 @@ import {
   Play,
   Square,
   Trash2,
+  Trash2,
 } from 'lucide-react';
 import { PageType } from '../App';
 import PageHeader from './shared/PageHeader';

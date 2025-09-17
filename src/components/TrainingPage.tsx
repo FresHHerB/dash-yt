@@ -46,6 +46,7 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
 
   const [isTraining, setIsTraining] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [draggedOver, setDraggedOver] = useState<number | null>(null);
 
   const addScript = () => {
     setTrainingData(prev => ({
@@ -79,13 +80,40 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
     const reader = new FileReader();
     reader.onload = (e) => {
       const content = e.target?.result as string;
+      const fileName = file.name.replace(/\.[^/.]+$/, ""); // Remove extension
       updateScriptByIndex(index, {
         file,
         text: content,
-        type: 'file'
+        type: 'text', // Always set to text so content is editable
+        title: fileName // Auto-fill title with filename
       });
     };
     reader.readAsText(file);
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    setDraggedOver(index);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDraggedOver(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    setDraggedOver(null);
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const file = files[0];
+      if (file.type === 'text/plain' || file.name.endsWith('.txt') || file.name.endsWith('.md')) {
+        handleFileUpload(index, file);
+      } else {
+        setMessage({ type: 'error', text: 'Apenas arquivos .txt e .md são suportados.' });
+      }
+    }
   };
 
   const validateForm = () => {
@@ -329,28 +357,48 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
                   </div>
 
                   {/* Content Input */}
-                  {script.type === 'text' ? (
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-300">
-                        Conteúdo do Roteiro
-                      </label>
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-300">
+                      Conteúdo do Roteiro
+                    </label>
+                    <div 
+                      className={`relative ${
+                        draggedOver === index 
+                          ? 'ring-2 ring-blue-500 ring-opacity-50' 
+                          : ''
+                      }`}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, index)}
+                    >
                       <textarea
                         value={script.text}
                         onChange={(e) => updateScriptByIndex(index, { text: e.target.value })}
                         rows={8}
-                        placeholder="Cole ou digite o conteúdo do roteiro aqui..."
-                        className="w-full p-4 bg-gray-800 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500 resize-none"
+                        placeholder="Cole, digite o conteúdo ou arraste um arquivo .txt/.md aqui..."
+                        className={`w-full p-4 bg-gray-800 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500 resize-none ${
+                          draggedOver === index 
+                            ? 'border-blue-500 bg-blue-900/10' 
+                            : ''
+                        }`}
                       />
-                      <div className="text-xs text-gray-400">
-                        {script.text.length.toLocaleString()} caracteres
-                      </div>
+                      {draggedOver === index && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-blue-500/10 border-2 border-dashed border-blue-500 rounded-lg pointer-events-none">
+                          <div className="text-blue-400 text-center">
+                            <Upload className="w-8 h-8 mx-auto mb-2" />
+                            <p className="font-medium">Solte o arquivo aqui</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-300">
-                        Upload de Arquivo
-                      </label>
-                      <div className="border-2 border-dashed border-gray-600 rounded-lg p-6 text-center hover:border-gray-500 transition-colors">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-400">
+                        {script.text.length.toLocaleString()} caracteres
+                      </span>
+                      <div className="flex items-center space-x-4">
+                        <span className="text-gray-500">
+                          Arraste arquivos .txt/.md aqui
+                        </span>
                         <input
                           type="file"
                           accept=".txt,.md"
@@ -361,23 +409,16 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
                           className="hidden"
                           id={`file-upload-${index}`}
                         />
-                        <label htmlFor={`file-upload-${index}`} className="cursor-pointer">
-                          <Upload className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                          <p className="text-gray-400">
-                            {script.file ? script.file.name : 'Clique para selecionar um arquivo'}
-                          </p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            Formatos suportados: .txt, .md
-                          </p>
+                        <label 
+                          htmlFor={`file-upload-${index}`} 
+                          className="cursor-pointer text-blue-400 hover:text-blue-300 flex items-center space-x-1"
+                        >
+                          <Upload className="w-3 h-3" />
+                          <span>ou clique aqui</span>
                         </label>
                       </div>
-                      {script.text && (
-                        <div className="text-xs text-gray-400">
-                          {script.text.length.toLocaleString()} caracteres carregados
-                        </div>
-                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
               ))}
             </div>

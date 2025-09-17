@@ -56,6 +56,9 @@ const PromptManagementPage: React.FC<PromptManagementPageProps> = ({ user, onBac
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [modalMessage, setModalMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [playingAudio, setPlayingAudio] = useState<{ id: string; audio: HTMLAudioElement } | null>(null);
+  const [deletingChannels, setDeletingChannels] = useState<Set<number>>(new Set());
+  const [channelToDelete, setChannelToDelete] = useState<Channel | null>(null);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
   // Voice test state
   const [testingVoices, setTestingVoices] = useState<Set<number>>(new Set());

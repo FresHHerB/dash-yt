@@ -152,15 +152,18 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
       // Construir payload dinamicamente
       const payload: any = {
         nome_canal: trainingData.channelName,
-        modelo: trainingData.model
+        modelo: trainingData.model,
+        roteiros: []
       };
 
-      // Adicionar roteiros dinamicamente
+      // Adicionar roteiros como array
       trainingData.scripts.forEach((script, index) => {
         if (script.text.trim()) {
-          payload[`titulo_${index + 1}`] = script.title || `Roteiro ${index + 1}`;
-          payload[`text_thumb_${index + 1}`] = script.thumbText || '';
-          payload[`roteiro_${index + 1}`] = script.text;
+          payload.roteiros.push({
+            title: script.title || `Roteiro ${index + 1}`,
+            text_thumb: script.thumbText || '',
+            roteiro: script.text
+          });
         }
       });
 

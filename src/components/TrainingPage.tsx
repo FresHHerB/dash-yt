@@ -232,6 +232,7 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
               <option value="GPT-5">GPT-5</option>
               <option value="Sonnet-4">Sonnet-4</option>
               <option value="Gemini-2.5-Pro">Gemini-2.5-Pro</option>
+              <option value="Gemini-2.5-Flash">Gemini-2.5-Flash</option>
             </select>
           </div>
 

@@ -61,6 +61,16 @@ const PromptManagementPage: React.FC<PromptManagementPageProps> = ({ user, onBac
   const [channelToDelete, setChannelToDelete] = useState<Channel | null>(null);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
   // Voice test state
   const [testingVoices, setTestingVoices] = useState<Set<number>>(new Set());
   const [voiceTestError, setVoiceTestError] = useState<string>('');
@@ -492,6 +502,7 @@ const PromptManagementPage: React.FC<PromptManagementPageProps> = ({ user, onBac
                 onEdit={() => openChannelModal(channel)}
                 onDelete={() => openDeleteConfirmation(channel)}
                 isDeleting={deletingChannels.has(channel.id)}
+                formatDate={formatDate}
               />
             ))}
           </div>
@@ -855,9 +866,10 @@ interface ChannelCardProps {
   onEdit: () => void;
   onDelete: () => void;
   isDeleting: boolean;
+  formatDate: (dateString: string) => string;
 }
 
-const ChannelCard: React.FC<ChannelCardProps> = ({ channel, onEdit, onDelete, isDeleting }) => {
+const ChannelCard: React.FC<ChannelCardProps> = ({ channel, onEdit, onDelete, isDeleting, formatDate }) => {
   const getChannelColor = (id: number) => {
     const colors = [
       'bg-blue-500',

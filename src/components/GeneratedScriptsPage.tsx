@@ -16,7 +16,8 @@ import {
   Video,
   Trash2,
   Edit3,
-  CheckCircle
+  CheckCircle,
+  Copy
 } from 'lucide-react';
 import { PageType } from '../App';
 import PageHeader from './shared/PageHeader';

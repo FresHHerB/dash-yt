@@ -11,6 +11,7 @@ import {
   Video,
   Play,
   Square,
+  Trash2,
 } from 'lucide-react';
 import { PageType } from '../App';
 import PageHeader from './shared/PageHeader';
@@ -56,10 +57,70 @@ const PromptManagementPage: React.FC<PromptManagementPageProps> = ({ user, onBac
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [modalMessage, setModalMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [playingAudio, setPlayingAudio] = useState<{ id: string; audio: HTMLAudioElement } | null>(null);
+  const [deletingChannels, setDeletingChannels] = useState<Set<number>>(new Set());
+  const [channelToDelete, setChannelToDelete] = useState<Channel | null>(null);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
 
   // Voice test state
   const [testingVoices, setTestingVoices] = useState<Set<number>>(new Set());
   const [voiceTestError, setVoiceTestError] = useState<string>('');
+
+  const openDeleteConfirmation = (channel: Channel) => {
+    setChannelToDelete(channel);
+    setShowDeleteConfirmation(true);
+  };
+
+  const closeDeleteConfirmation = () => {
+    setChannelToDelete(null);
+    setShowDeleteConfirmation(false);
+  };
+
+  const deleteChannel = async () => {
+    if (!channelToDelete) return;
+
+    setDeletingChannels(prev => new Set(prev).add(channelToDelete.id));
+    setMessage(null);
+
+    try {
+      const { error } = await supabase
+        .from('canais')
+        .delete()
+        .eq('id', channelToDelete.id);
+
+      if (error) {
+        throw error;
+      }
+
+      console.log('✅ Canal excluído com sucesso:', channelToDelete.nome_canal);
+      setMessage({ type: 'success', text: 'Canal excluído com sucesso!' });
+      
+      // Atualizar a lista de canais
+      await loadChannels();
+      
+      // Fechar modal de confirmação
+      closeDeleteConfirmation();
+      
+    } catch (error) {
+      console.error('❌ Erro ao excluir canal:', error);
+      setMessage({ type: 'error', text: 'Erro ao excluir canal. Tente novamente.' });
+    } finally {
+      setDeletingChannels(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(channelToDelete.id);
+        return newSet;
+      });
+    }
+  };
 
   useEffect(() => {
     loadChannels();
@@ -439,11 +500,109 @@ const PromptManagementPage: React.FC<PromptManagementPageProps> = ({ user, onBac
                 key={channel.id}
                 channel={channel}
                 onEdit={() => openChannelModal(channel)}
+                onDelete={() => openDeleteConfirmation(channel)}
+                isDeleting={deletingChannels.has(channel.id)}
+                formatDate={formatDate}
               />
             ))}
           </div>
         )}
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirmation && channelToDelete && (
+        <div 
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 z-50"
+          onClick={closeDeleteConfirmation}
+        >
+          <div 
+            className="bg-gray-900 rounded-2xl border border-red-700 w-full max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-red-700">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-red-500 rounded-xl flex items-center justify-center">
+                  <Trash2 className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-medium text-white">Excluir Canal</h2>
+                  <p className="text-sm text-red-400">Esta ação não pode ser desfeita</p>
+                </div>
+              </div>
+              <button
+                onClick={closeDeleteConfirmation}
+                className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all duration-200"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Modal Content */}
+            <div className="p-6">
+              <div className="mb-6">
+                <p className="text-gray-300 mb-4">
+                  Tem certeza que deseja excluir este canal?
+                </p>
+                <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-4">
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Nome:</span>
+                      <span className="text-white">{channelToDelete.nome_canal}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">ID:</span>
+                      <span className="text-white">#{channelToDelete.id}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-400">Criado em:</span>
+                      <span className="text-white">{formatDate(channelToDelete.created_at)}</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-4 p-3 bg-yellow-900/20 border border-yellow-800 rounded-lg">
+                  <p className="text-yellow-400 text-sm">
+                    ⚠️ <strong>Atenção:</strong> Todos os roteiros associados a este canal também serão excluídos permanentemente.
+                  </p>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end space-x-3">
+                <button
+                  onClick={closeDeleteConfirmation}
+                  className="px-6 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all duration-200"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={deleteChannel}
+                  disabled={channelToDelete ? deletingChannels.has(channelToDelete.id) : false}
+                  className={`
+                    flex items-center space-x-2 px-6 py-2 rounded-lg font-medium transition-all duration-200
+                    ${channelToDelete && deletingChannels.has(channelToDelete.id)
+                      ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                      : 'bg-red-600 hover:bg-red-700 text-white'
+                    }
+                  `}
+                >
+                  {channelToDelete && deletingChannels.has(channelToDelete.id) ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      <span>Excluindo...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span>Excluir Canal</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Edit Prompt Modal */}
       {selectedChannel && (
@@ -705,9 +864,12 @@ const PromptManagementPage: React.FC<PromptManagementPageProps> = ({ user, onBac
 interface ChannelCardProps {
   channel: Channel;
   onEdit: () => void;
+  onDelete: () => void;
+  isDeleting: boolean;
+  formatDate: (dateString: string) => string;
 }
 
-const ChannelCard: React.FC<ChannelCardProps> = ({ channel, onEdit }) => {
+const ChannelCard: React.FC<ChannelCardProps> = ({ channel, onEdit, onDelete, isDeleting, formatDate }) => {
   const getChannelColor = (id: number) => {
     const colors = [
       'bg-blue-500',
@@ -728,20 +890,15 @@ const ChannelCard: React.FC<ChannelCardProps> = ({ channel, onEdit }) => {
 
   const iconColor = getChannelColor(channel.id);
 
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
   const hasPrompt = channel.prompt_roteiro && channel.prompt_roteiro.trim().length > 0;
 
+  const handleDeleteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDelete();
+  };
+
   return (
-    <div className="bg-gray-900/50 backdrop-blur-xl rounded-2xl border border-gray-800 hover:border-gray-700 transition-all duration-300 transform hover:scale-105 cursor-pointer group"
+    <div className="bg-gray-900/50 backdrop-blur-xl rounded-2xl border border-gray-800 hover:border-gray-700 transition-all duration-300 transform hover:scale-105 cursor-pointer group relative"
          onClick={onEdit}>
       <div className="p-6">
         {/* Channel Header */}
@@ -759,8 +916,24 @@ const ChannelCard: React.FC<ChannelCardProps> = ({ channel, onEdit }) => {
               </p>
             </div>
           </div>
-          <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center space-x-2">
             <Edit3 className="w-5 h-5 text-purple-400" />
+            <button
+              onClick={handleDeleteClick}
+              disabled={isDeleting}
+              className={`p-1 rounded-lg transition-all duration-200 ${
+                isDeleting 
+                  ? 'bg-gray-600 text-gray-400 cursor-not-allowed' 
+                  : 'hover:bg-red-600/20 text-red-400 hover:text-red-300'
+              }`}
+              title="Excluir canal"
+            >
+              {isDeleting ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Trash2 className="w-5 h-5" />
+              )}
+            </button>
           </div>
         </div>
 

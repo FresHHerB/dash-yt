@@ -16,10 +16,6 @@ export interface ScriptData {
 
 export interface TrainingData {
   channelName: string;
-  scripts: {
-    script1: ScriptData;
-    script2: ScriptData;
-    script3: ScriptData;
-  };
+  scripts: ScriptData[];
   model: 'GPT-5' | 'GPT-4.1-mini' | 'Sonnet-4' | 'Gemini-2.5-Pro';
 }

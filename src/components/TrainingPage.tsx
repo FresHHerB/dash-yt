@@ -1,26 +1,33 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
+import { buildWebhookUrl } from '../config/environment';
 import { 
   BookOpen, 
   Upload, 
-  Type, 
-  X, 
-  Wand2, 
-  Loader2, 
   FileText, 
-  Bot,
-  Sparkles,
-  CheckCircle,
-  Copy,
-  Download,
-  Mic,
-  Play,
-  Square,
+  Loader2, 
+  CheckCircle, 
+  AlertCircle,
+  Plus,
+  Trash2,
+  X
 } from 'lucide-react';
-import { ScriptData, TrainingData } from '../types';
 import { PageType } from '../App';
-import { supabase } from '../lib/supabase';
-import { buildWebhookUrl, buildElevenLabsUrl, buildFishAudioUrl } from '../config/environment';
 import PageHeader from './shared/PageHeader';
+
+interface ScriptData {
+  title: string;
+  thumbText: string;
+  text: string;
+  file: File | null;
+  type: 'text' | 'file';
+}
+
+interface TrainingData {
+  channelName: string;
+  scripts: ScriptData[];
+  model: 'GPT-5' | 'GPT-4.1-mini' | 'Sonnet-4' | 'Gemini-2.5-Pro' | 'Gemini-2.5-Flash';
+}
 
 interface TrainingPageProps {
   user: any;
@@ -31,446 +38,200 @@ interface TrainingPageProps {
 const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate }) => {
   const [trainingData, setTrainingData] = useState<TrainingData>({
     channelName: '',
-    scripts: {
-      script1: { text: '', file: null, type: 'text', title: '', thumbText: '' },
-      script2: { text: '', file: null, type: 'text', title: '', thumbText: '' },
-      script3: { text: '', file: null, type: 'text', title: '', thumbText: '' },
-    },
-    model: 'GPT-5'
+    scripts: [
+      { title: '', thumbText: '', text: '', file: null, type: 'text' }
+    ],
+    model: 'GPT-4.1-mini'
   });
-  
-  const [isLoading, setIsLoading] = useState(false);
+
+  const [isTraining, setIsTraining] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [showPromptModal, setShowPromptModal] = useState(false);
-  const [promptData, setPromptData] = useState<{ 
-    channelName: string; 
-    prompt_titulo: string; 
-    prompt_roteiro: string;
-    media_chars?: number | null;
-  } | null>(null);
-  const [editedTitlePrompt, setEditedTitlePrompt] = useState('');
-  const [editedScriptPrompt, setEditedScriptPrompt] = useState('');
-  const [selectedVoiceId, setSelectedVoiceId] = useState<number | null>(null);
-  const [mediaChars, setMediaChars] = useState<string>('');
-  const [voices, setVoices] = useState<Voice[]>([]);
-  const [isLoadingVoices, setIsLoadingVoices] = useState(true);
-  const [isUpdatingPrompt, setIsUpdatingPrompt] = useState(false);
-  const [modalMessage, setModalMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [playingAudio, setPlayingAudio] = useState<{ id: string; audio: HTMLAudioElement } | null>(null);
-  const [testingVoices, setTestingVoices] = useState<Set<number>>(new Set());
+  const [draggedOver, setDraggedOver] = useState<number | null>(null);
 
-  // Voice interface
-  interface Voice {
-    id: number;
-    nome_voz: string;
-    voice_id: string;
-    plataforma: string;
-    idioma?: string;
-    genero?: string;
-    preview_url?: string;
-    created_at: string;
-  }
-
-  useEffect(() => {
-    loadVoices();
-  }, []);
-
-  const loadVoices = async () => {
-    setIsLoadingVoices(true);
-    try {
-      const { data, error } = await supabase
-        .from('vozes')
-        .select('*')
-        .order('nome_voz', { ascending: true });
-
-      if (error) {
-        console.error('Erro ao carregar vozes:', error);
-      } else {
-        setVoices(data || []);
-        // Selecionar primeira voz por padrão se houver vozes disponíveis
-        if (data && data.length > 0 && !selectedVoiceId) {
-          setSelectedVoiceId(data[0].id);
-        }
-      }
-    } catch (err) {
-      console.error('Erro de conexão ao carregar vozes:', err);
-    } finally {
-      setIsLoadingVoices(false);
-    }
-  };
-
-  // Audio control functions
-  const playAudio = (audioUrl: string, audioId: string) => {
-    if (playingAudio) {
-      playingAudio.audio.pause();
-      playingAudio.audio.currentTime = 0;
-    }
-
-    const audio = new Audio(audioUrl);
-    
-    audio.addEventListener('ended', () => {
-      setPlayingAudio(null);
-    });
-
-    audio.addEventListener('error', () => {
-      setPlayingAudio(null);
-      setModalMessage({ type: 'error', text: 'Erro ao reproduzir áudio' });
-    });
-
-    audio.play().then(() => {
-      setPlayingAudio({ id: audioId, audio });
-    }).catch(() => {
-      setModalMessage({ type: 'error', text: 'Erro ao reproduzir áudio' });
-    });
-  };
-
-  const pauseAudio = () => {
-    if (playingAudio) {
-      playingAudio.audio.pause();
-      playingAudio.audio.currentTime = 0;
-      setPlayingAudio(null);
-    }
-  };
-
-  const isAudioPlaying = (audioId: string) => {
-    return playingAudio?.id === audioId;
-  };
-
-  // Generate voice test audio
-  const generateVoiceTest = async (voiceId: number): Promise<string> => {
-    try {
-      const voice = voices.find(v => v.id === voiceId);
-      if (!voice) {
-        throw new Error('Voz não encontrada');
-      }
-
-      if (voice.plataforma === 'ElevenLabs') {
-        const { data: apisData } = await supabase
-          .from('apis')
-          .select('*')
-          .eq('plataforma', voice.plataforma)
-          .single();
-
-        if (!apisData) {
-          throw new Error(`API key não encontrada para ${voice.plataforma}`);
-        }
-
-        const response = await fetch(buildElevenLabsUrl(`/voices/${voice.voice_id}`), {
-          method: 'GET',
-          headers: {
-            'xi-api-key': apisData.api_key
-          },
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Erro ElevenLabs: ${response.status} - ${errorText}`);
-        }
-
-        const voiceData = await response.json();
-        
-        if (!voiceData.preview_url) {
-          throw new Error('Nenhum preview de áudio disponível para esta voz ElevenLabs');
-        }
-        
-        return voiceData.preview_url;
-
-      } else if (voice.plataforma === 'Fish-Audio') {
-        const { data: apisData } = await supabase
-          .from('apis')
-          .select('*')
-          .eq('plataforma', voice.plataforma)
-          .single();
-
-        if (!apisData) {
-          throw new Error(`API key não encontrada para ${voice.plataforma}`);
-        }
-
-        const response = await fetch(buildFishAudioUrl(`/model/${voice.voice_id}`), {
-          method: 'GET',
-          headers: {
-            'Authorization': `Bearer ${apisData.api_key}`,
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Erro Fish-Audio: ${response.status} - ${errorText}`);
-        }
-
-        const modelData = await response.json();
-        
-        if (!modelData.samples || modelData.samples.length === 0) {
-          throw new Error('Nenhum sample de áudio disponível para esta voz Fish-Audio');
-        }
-        
-        const sampleAudioUrl = modelData.samples[0].audio;
-        if (!sampleAudioUrl) {
-          throw new Error('URL de áudio do sample não encontrada');
-        }
-        
-        return sampleAudioUrl;
-      }
-
-      throw new Error('Plataforma não suportada para teste');
-    } catch (error) {
-      console.error('Erro ao gerar teste de voz:', error);
-      throw error;
-    }
-  };
-
-  const playSelectedVoicePreview = () => {
-    if (!selectedVoiceId) return;
-
-    const audioId = `voice-preview-${selectedVoiceId}`;
-    
-    if (isAudioPlaying(audioId)) {
-      pauseAudio();
-      return;
-    }
-
-    setTestingVoices(prev => new Set(prev).add(selectedVoiceId));
-
-    generateVoiceTest(selectedVoiceId)
-      .then(audioUrl => {
-        playAudio(audioUrl, audioId);
-      })
-      .catch(error => {
-        console.error('Erro no teste de voz:', error);
-        setModalMessage({ type: 'error', text: error instanceof Error ? error.message : 'Erro ao testar voz' });
-      })
-      .finally(() => {
-        setTestingVoices(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(selectedVoiceId);
-          return newSet;
-        });
-      });
-  };
-
-  const updateScript = (scriptKey: keyof TrainingData['scripts'], data: Partial<ScriptData>) => {
+  const addScript = () => {
     setTrainingData(prev => ({
       ...prev,
-      scripts: {
+      scripts: [
         ...prev.scripts,
-        [scriptKey]: { ...prev.scripts[scriptKey], ...data }
-      }
+        { title: '', thumbText: '', text: '', file: null, type: 'text' }
+      ]
     }));
   };
 
-  const handleSubmit = async () => {
-    if (!trainingData.channelName.trim()) {
-      setMessage({ type: 'error', text: 'Por favor, preencha o nome do canal.' });
-      return;
-    }
+  const removeScript = (index: number) => {
+    if (trainingData.scripts.length <= 1) return;
+    
+    setTrainingData(prev => ({
+      ...prev,
+      scripts: prev.scripts.filter((_, i) => i !== index)
+    }));
+  };
 
-    const hasContent = Object.values(trainingData.scripts).some(script => 
-      script.text.trim() || script.file
-    );
+  const updateScriptByIndex = (index: number, data: Partial<ScriptData>) => {
+    setTrainingData(prev => ({
+      ...prev,
+      scripts: prev.scripts.map((script, i) => 
+        i === index ? { ...script, ...data } : script
+      )
+    }));
+  };
 
-    if (!hasContent) {
-      setMessage({ type: 'error', text: 'Por favor, adicione pelo menos um roteiro.' });
-      return;
-    }
-
-    setIsLoading(true);
-    setMessage(null);
-
-    try {
-      const readFileContent = (file: File): Promise<string> => {
-        return new Promise((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = (e) => resolve(e.target?.result as string || '');
-          reader.onerror = () => reject(new Error('Erro ao ler arquivo'));
-          reader.readAsText(file);
-        });
-      };
-
-      const getScriptContent = async (script: ScriptData): Promise<string> => {
-        if (script.type === 'text') {
-          return script.text;
-        } else if (script.file) {
-          try {
-            return await readFileContent(script.file);
-          } catch (error) {
-            console.error("Error reading file:", error);
-            return '';
-          }
-        }
-        return '';
-      };
-
-      const script1Content = await getScriptContent(trainingData.scripts.script1);
-      const script2Content = await getScriptContent(trainingData.scripts.script2);
-      const script3Content = await getScriptContent(trainingData.scripts.script3);
-
-      const payload = {
-        nomeCanal: trainingData.channelName,
-        titulo1: trainingData.scripts.script1.title,
-        roteiro1: script1Content,
-        texto_thumb1: trainingData.scripts.script1.thumbText,
-        titulo2: trainingData.scripts.script2.title,
-        roteiro2: script2Content,
-        texto_thumb2: trainingData.scripts.script2.thumbText,
-        titulo3: trainingData.scripts.script3.title,
-        roteiro3: script3Content,
-        texto_thumb3: trainingData.scripts.script3.thumbText,
-        modelo: trainingData.model
-      };
-
-      const response = await fetch(buildWebhookUrl('guideScript'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+  const handleFileUpload = (index: number, file: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      const fileName = file.name.replace(/\.[^/.]+$/, ""); // Remove extension
+      updateScriptByIndex(index, {
+        file,
+        text: content,
+        type: 'text', // Always set to text so content is editable
+        title: fileName // Auto-fill title with filename
       });
+    };
+    reader.readAsText(file);
+  };
 
-      if (response.ok) {
-        const result = await response.json();
-        const responseData = result[0] || result || {};
-        const titlePrompt = responseData.prompt_titulo || 'Prompt de título não encontrado';
-        const scriptPrompt = responseData.prompt_roteiro || 'Prompt de roteiro não encontrado';
-        const thumbPrompt = responseData.thumb_prompt || 'Prompt de thumb não encontrado';
-        const canalId = responseData.id || null;
-        
-        setPromptData({ 
-          id: canalId,
-          channelName: trainingData.channelName, 
-          prompt_titulo: titlePrompt,
-          prompt_roteiro: scriptPrompt,
-          thumb_prompt: thumbPrompt,
-          media_chars: responseData.media_chars || null
-        });
-        setEditedTitlePrompt(titlePrompt);
-        setEditedScriptPrompt(scriptPrompt);
-        setMediaChars(responseData.media_chars ? responseData.media_chars.toString() : '');
-        // Selecionar primeira voz se não houver uma selecionada
-        if (voices.length > 0 && !selectedVoiceId) {
-          setSelectedVoiceId(voices[0].id);
-        }
-        setShowPromptModal(true);
-        setModalMessage(null);
-        setMessage({ type: 'success', text: 'Treinamento enviado com sucesso!' });
-        
-        // Reset form
-        setTrainingData({
-          channelName: '',
-          scripts: {
-            script1: { text: '', file: null, type: 'text', title: '', thumbText: '' },
-            script2: { text: '', file: null, type: 'text', title: '', thumbText: '' },
-            script3: { text: '', file: null, type: 'text', title: '', thumbText: '' },
-          },
-          model: 'GPT-5'
-        });
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    setDraggedOver(index);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDraggedOver(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    setDraggedOver(null);
+    
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+      const file = files[0];
+      if (file.type === 'text/plain' || file.name.endsWith('.txt') || file.name.endsWith('.md')) {
+        handleFileUpload(index, file);
       } else {
-        throw new Error('Falha no envio do treinamento');
+        setMessage({ type: 'error', text: 'Apenas arquivos .txt e .md são suportados.' });
       }
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Erro ao enviar treinamento. Tente novamente.' });
-    } finally {
-      setIsLoading(false);
     }
   };
 
-  const updatePromptInDatabase = async () => {
-    if (!promptData) return;
+  const validateForm = () => {
+    if (!trainingData.channelName.trim()) {
+      setMessage({ type: 'error', text: 'Nome do canal é obrigatório.' });
+      return false;
+    }
 
-    setIsUpdatingPrompt(true);
-    setModalMessage(null);
+    const hasValidScript = trainingData.scripts.some(script => 
+      script.text.trim().length > 0
+    );
+
+    if (!hasValidScript) {
+      setMessage({ type: 'error', text: 'Pelo menos um roteiro deve ter conteúdo.' });
+      return false;
+    }
+
+    return true;
+  };
+
+  const handleTraining = async () => {
+    if (!validateForm()) return;
+
+    setIsTraining(true);
+    setMessage(null);
+
     try {
-      console.log('🚀 Iniciando atualização de prompt...');
+      // Verificar se as variáveis de ambiente estão configuradas
+      const webhookUrl = buildWebhookUrl('trainChannel');
+      console.log('🔗 [TRAINING] URL do webhook:', webhookUrl);
       
-      const payload = {
-       id_canal: promptData.id || null,
-        prompt_titulo: editedTitlePrompt,
-        prompt_roteiro: editedScriptPrompt,
-        nome_canal: promptData.channelName,
-        id_voz: selectedVoiceId,
-        media_chars: mediaChars ? parseFloat(mediaChars) : null
+      if (!webhookUrl || webhookUrl.includes('undefined')) {
+        throw new Error('URL do webhook não está configurada corretamente. Verifique as variáveis de ambiente VITE_WEBHOOK_BASE_URL e VITE_WEBHOOK_GENERATE_CONTENT no arquivo .env');
+      }
+
+      // Construir payload dinamicamente
+      const payload: any = {
+        nome_canal: trainingData.channelName,
+        modelo: trainingData.model,
+        roteiros: []
       };
 
-      console.log('📤 Payload enviado:', payload);
-
-      const response = await fetch(buildWebhookUrl('updatePrompts'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payload),
+      // Adicionar roteiros como array
+      trainingData.scripts.forEach((script, index) => {
+        if (script.text.trim()) {
+          payload.roteiros.push({
+            title: script.title || `Roteiro ${index + 1}`,
+            text_thumb: script.thumbText || '',
+            roteiro: script.text
+          });
+        }
       });
+
+      console.log('📤 Enviando dados de treinamento:', payload);
+
+      let response;
+      try {
+        response = await fetch(webhookUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+      } catch (fetchError) {
+        console.error('❌ [TRAINING] Erro de conectividade:', fetchError);
+        
+        if (fetchError.message.includes('Failed to fetch')) {
+          throw new Error(`Não foi possível conectar ao serviço N8N. Verifique se:\n• O serviço N8N está rodando\n• A URL está correta: ${webhookUrl}\n• Não há bloqueios de firewall ou proxy`);
+        } else {
+          throw new Error(`Erro de rede: ${fetchError.message}`);
+        }
+      }
 
       console.log('📡 Response status:', response.status);
 
       if (response.ok) {
         const result = await response.json();
-        console.log('✅ Prompt atualizado com sucesso:', result);
+        console.log('✅ Treinamento concluído:', result);
         
-        // Processar resposta do webhook
-        if (result && result.length > 0) {
-          const updatedData = result[0];
-          
-          // Atualizar os prompts com os dados retornados
-          if (updatedData.prompt_titulo) {
-            setEditedTitlePrompt(updatedData.prompt_titulo);
-          }
-          if (updatedData.prompt_roteiro) {
-            setEditedScriptPrompt(updatedData.prompt_roteiro);
-          }
-          if (updatedData.media_chars) {
-            setMediaChars(updatedData.media_chars.toString());
-          }
-          
-          setModalMessage({ type: 'success', text: 'Prompt atualizado com sucesso! Dados sincronizados.' });
-        } else {
-          setModalMessage({ type: 'success', text: 'Prompt atualizado com sucesso!' });
-        }
+        setMessage({ type: 'success', text: 'Canal treinado com sucesso!' });
+        
+        // Limpar formulário
+        setTrainingData({
+          channelName: '',
+          scripts: [
+            { title: '', thumbText: '', text: '', file: null, type: 'text' }
+          ],
+          model: 'GPT-4.1-mini'
+        });
       } else {
-        throw new Error('Falha na atualização do prompt');
+        let errorMessage = `Erro ${response.status}: ${response.statusText}`;
+        
+        try {
+          const errorData = await response.text();
+          if (errorData) {
+            errorMessage += `\nDetalhes: ${errorData}`;
+          }
+        } catch (e) {
+          // Ignorar erro ao ler resposta
+        }
+        
+        throw new Error(errorMessage);
       }
-    } catch (err) {
-      console.error('❌ Erro na atualização:', err);
-      setModalMessage({ type: 'error', text: 'Erro ao atualizar prompt. Tente novamente.' });
+    } catch (error) {
+      console.error('❌ Erro no treinamento:', error);
+      
+      let errorMessage = 'Erro ao treinar canal. Tente novamente.';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      setMessage({ type: 'error', text: errorMessage });
     } finally {
-      setIsUpdatingPrompt(false);
+      setIsTraining(false);
     }
   };
-
-  const copyToClipboard = async () => {
-    const combinedPrompts = `=== PROMPT DE TÍTULO ===\n${editedTitlePrompt}\n\n=== PROMPT DE ROTEIRO ===\n${editedScriptPrompt}`;
-    if (combinedPrompts) {
-      try {
-        await navigator.clipboard.writeText(combinedPrompts);
-        setModalMessage({ type: 'success', text: 'Prompts copiados para a área de transferência!' });
-      } catch (err) {
-        setModalMessage({ type: 'error', text: 'Erro ao copiar prompts.' });
-      }
-    }
-  };
-
-  const downloadPrompt = () => {
-    const combinedPrompts = `=== PROMPT DE TÍTULO ===\n${editedTitlePrompt}\n\n=== PROMPT DE ROTEIRO ===\n${editedScriptPrompt}`;
-    if (combinedPrompts) {
-      const blob = new Blob([combinedPrompts], { type: 'text/plain' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `prompts-${promptData?.channelName || 'roteiro'}-${new Date().toISOString().split('T')[0]}.txt`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }
-  };
-
-  const modelOptions = [
-    { value: 'GPT-5', label: 'GPT-5', icon: Bot },
-    { value: 'GPT-4.1-mini', label: 'GPT-4.1-mini', icon: Bot },
-    { value: 'Sonnet-4', label: 'Sonnet-4', icon: Sparkles },
-    { value: 'Gemini-2.5-Pro', label: 'Gemini-2.5-Pro', icon: Wand2 },
-    { value: 'Gemini-2.5-Flash', label: 'Gemini-2.5-Flash', icon: Wand2 }
-  ] as const;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
@@ -481,567 +242,260 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
         onNavigate={onNavigate}
       />
 
-      <div className="max-w-6xl mx-auto px-6 pt-32 pb-12">
-        <div className="space-y-12">
+      <div className="max-w-4xl mx-auto px-6 pt-32 pb-12">
+        {message && (
+          <div className={`max-w-md mx-auto mb-8 p-4 rounded-xl text-center border ${
+            message.type === 'success' 
+              ? 'bg-green-900/20 text-green-400 border-green-800' 
+              : 'bg-red-900/20 text-red-400 border-red-800'
+          }`}>
+            <div className="flex items-center justify-center space-x-2">
+              {message.type === 'success' ? (
+                <CheckCircle className="w-5 h-5" />
+              ) : (
+                <AlertCircle className="w-5 h-5" />
+              )}
+              <div className="text-left">
+                <div className="font-medium whitespace-pre-line">{message.text}</div>
+                {message.type === 'error' && (
+                  <div className="text-xs mt-2 opacity-75">
+                    Verifique o console do navegador (F12) para mais detalhes técnicos.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Training Form */}
+        <div className="bg-gray-900/50 backdrop-blur-xl rounded-2xl border border-gray-800 p-8">
+          <div className="flex items-center space-x-3 mb-8">
+            <div className="w-12 h-12 bg-blue-500 rounded-xl flex items-center justify-center">
+              <BookOpen className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-light text-white">Treinar Novo Canal</h2>
+              <p className="text-gray-400">Configure um canal com roteiros de exemplo</p>
+            </div>
+          </div>
+
+          {/* Channel Name */}
+          <div className="space-y-2 mb-6">
+            <label className="block text-sm font-medium text-gray-300">
+              Nome do Canal
+            </label>
+            <input
+              type="text"
+              value={trainingData.channelName}
+              onChange={(e) => setTrainingData(prev => ({ ...prev, channelName: e.target.value }))}
+              placeholder="Digite o nome do canal..."
+              className="w-full p-4 bg-black border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500"
+            />
+          </div>
+
+          {/* Model Selection */}
+          <div className="space-y-2 mb-8">
+            <label className="block text-sm font-medium text-gray-300">
+              Modelo de IA
+            </label>
+            <select
+              value={trainingData.model}
+              onChange={(e) => setTrainingData(prev => ({ ...prev, model: e.target.value as TrainingData['model'] }))}
+              className="w-full p-4 bg-black border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white"
+            >
+              <option value="GPT-4.1-mini">GPT-4.1-mini</option>
+              <option value="GPT-5">GPT-5</option>
+              <option value="Sonnet-4">Sonnet-4</option>
+              <option value="Gemini-2.5-Pro">Gemini-2.5-Pro</option>
+              <option value="Gemini-2.5-Flash">Gemini-2.5-Flash</option>
+            </select>
+          </div>
+
           {/* Scripts Section */}
-          <div className="bg-gray-900/50 backdrop-blur-xl rounded-2xl border border-gray-800 p-8">
-            <div className="mb-8">
-              <h2 className="text-2xl font-light text-white mb-2">Configuração do Canal</h2>
-              <p className="text-gray-400 text-sm">Defina o nome do canal e adicione até 3 roteiros para treinar o modelo</p>
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-medium text-white">Roteiros de Exemplo</h3>
+              <div className="flex items-center space-x-4">
+                <span className="text-sm text-gray-400">{trainingData.scripts.length} roteiro(s)</span>
+                <button
+                  onClick={addScript}
+                  className="flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all duration-200"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Adicionar</span>
+                </button>
+              </div>
             </div>
-            
-            {/* Channel Name */}
-            <div className="space-y-2 mb-8">
-              <label className="block text-sm font-medium text-gray-300">
-                Nome do Canal
-              </label>
-              <input
-                type="text"
-                value={trainingData.channelName}
-                onChange={(e) => setTrainingData(prev => ({ ...prev, channelName: e.target.value }))}
-                placeholder="Ex: Meu Canal de Tecnologia"
-                className="w-full p-4 bg-black border border-gray-700 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500"
-              />
-            </div>
-            
-            {/* Scripts Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {Object.entries(trainingData.scripts).map(([key, script], index) => (
-                <ScriptInputCard
-                  key={key}
-                  title={`Roteiro ${index + 1}`}
-                  script={script}
-                  onUpdate={(data) => updateScript(key as keyof TrainingData['scripts'], data)}
-                />
+
+            {/* Scripts List */}
+            <div className="space-y-6">
+              {trainingData.scripts.map((script, index) => (
+                <div key={index} className="bg-black/50 border border-gray-700 rounded-xl p-6 hover:border-gray-600 transition-all duration-200">
+                  <div className="flex items-center justify-between mb-4">
+                    <h4 className="text-white font-medium flex items-center space-x-2">
+                      <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-xs text-white font-bold">
+                        {index + 1}
+                      </div>
+                      <span>Roteiro {index + 1}</span>
+                    </h4>
+                    {trainingData.scripts.length > 1 && (
+                      <button
+                        onClick={() => removeScript(index)}
+                        className="p-2 text-red-400 hover:text-red-300 hover:bg-red-900/20 rounded-lg transition-all duration-200"
+                        title="Remover roteiro"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Title */}
+                  <div className="space-y-2 mb-4">
+                    <label className="block text-sm font-medium text-gray-300">
+                      Título
+                    </label>
+                    <input
+                      type="text"
+                      value={script.title}
+                      onChange={(e) => updateScriptByIndex(index, { title: e.target.value })}
+                      placeholder="Título do roteiro..."
+                      className="w-full p-3 bg-gray-800 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500"
+                    />
+                  </div>
+
+                  {/* Thumb Text */}
+                  <div className="space-y-2 mb-4">
+                    <label className="block text-sm font-medium text-gray-300">
+                      Texto da Thumb
+                    </label>
+                    <input
+                      type="text"
+                      value={script.thumbText}
+                      onChange={(e) => updateScriptByIndex(index, { thumbText: e.target.value })}
+                      placeholder="Texto que aparece na thumbnail..."
+                      className="w-full p-3 bg-gray-800 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500"
+                    />
+                  </div>
+
+                  {/* Content Type Toggle */}
+                  <div className="flex items-center space-x-4 mb-4">
+                    <button
+                      onClick={() => updateScriptByIndex(index, { type: 'text', file: null })}
+                      className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                        script.type === 'text'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      <FileText className="w-4 h-4" />
+                      <span>Texto</span>
+                    </button>
+                    <button
+                      onClick={() => updateScriptByIndex(index, { type: 'file' })}
+                      className={`flex items-center space-x-2 px-4 py-2 rounded-lg transition-all duration-200 ${
+                        script.type === 'file'
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                      }`}
+                    >
+                      <Upload className="w-4 h-4" />
+                      <span>Arquivo</span>
+                    </button>
+                  </div>
+
+                  {/* Content Input */}
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-300">
+                      Conteúdo do Roteiro
+                    </label>
+                    <div 
+                      className={`relative ${
+                        draggedOver === index 
+                          ? 'ring-2 ring-blue-500 ring-opacity-50' 
+                          : ''
+                      }`}
+                      onDragOver={(e) => handleDragOver(e, index)}
+                      onDragLeave={handleDragLeave}
+                      onDrop={(e) => handleDrop(e, index)}
+                    >
+                      <textarea
+                        value={script.text}
+                        onChange={(e) => updateScriptByIndex(index, { text: e.target.value })}
+                        rows={8}
+                        placeholder="Cole, digite o conteúdo ou arraste um arquivo .txt/.md aqui..."
+                        className={`w-full p-4 bg-gray-800 border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500 resize-none ${
+                          draggedOver === index 
+                            ? 'border-blue-500 bg-blue-900/10' 
+                            : ''
+                        }`}
+                      />
+                      {draggedOver === index && (
+                        <div className="absolute inset-0 flex items-center justify-center bg-blue-500/10 border-2 border-dashed border-blue-500 rounded-lg pointer-events-none">
+                          <div className="text-blue-400 text-center">
+                            <Upload className="w-8 h-8 mx-auto mb-2" />
+                            <p className="font-medium">Solte o arquivo aqui</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-gray-400">
+                        {script.text.length.toLocaleString()} caracteres
+                      </span>
+                      <div className="flex items-center space-x-4">
+                        <span className="text-gray-500">
+                          Arraste arquivos .txt/.md aqui
+                        </span>
+                        <input
+                          type="file"
+                          accept=".txt,.md"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) handleFileUpload(index, file);
+                          }}
+                          className="hidden"
+                          id={`file-upload-${index}`}
+                        />
+                        <label 
+                          htmlFor={`file-upload-${index}`} 
+                          className="cursor-pointer text-blue-400 hover:text-blue-300 flex items-center space-x-1"
+                        >
+                          <Upload className="w-3 h-3" />
+                          <span>ou clique aqui</span>
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               ))}
             </div>
           </div>
 
-          {/* Model Selection */}
-          <div className="bg-gray-900/50 backdrop-blur-xl rounded-2xl border border-gray-800 p-8">
-            <div className="mb-6">
-              <h2 className="text-2xl font-light text-white mb-2">Modelo de IA</h2>
-              <p className="text-gray-400 text-sm">Escolha o modelo que melhor se adapta ao seu estilo</p>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {modelOptions.map((option) => {
-                const IconComponent = option.icon;
-                return (
-                  <button
-                    key={option.value}
-                    onClick={() => setTrainingData(prev => ({ ...prev, model: option.value }))}
-                    className={`p-6 rounded-xl border transition-all duration-300 transform hover:scale-105 ${
-                      trainingData.model === option.value
-                        ? 'bg-blue-900/30 border-blue-500 text-blue-400'
-                        : 'bg-gray-800/50 border-gray-700 text-gray-300 hover:border-gray-600'
-                    }`}
-                  >
-                    <div className="flex flex-col items-center space-y-3">
-                      <IconComponent className="w-8 h-8" />
-                      <span className="font-medium">{option.label}</span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           {/* Submit Button */}
-          <div className="flex justify-center">
-            <button
-              onClick={handleSubmit}
-              disabled={!trainingData.channelName.trim() || isLoading}
-              className={`
-                flex items-center space-x-3 px-12 py-4 rounded-xl font-medium transition-all duration-300 transform
-                ${!trainingData.channelName.trim() || isLoading
-                  ? 'bg-gray-800 text-gray-600 cursor-not-allowed border border-gray-700'
-                  : 'bg-white text-black hover:bg-gray-100 hover:scale-105 active:scale-95 shadow-lg hover:shadow-xl'
-                }
-              `}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-5 h-5 animate-spin" />
-                  <span>Processando Treinamento...</span>
-                </>
-              ) : (
-                <>
-                  <Wand2 className="w-5 h-5" />
-                  <span>Iniciar Treinamento</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Message Display */}
-          {message && (
-            <div className={`max-w-md mx-auto p-4 rounded-xl text-center border ${
-              message.type === 'success' 
-                ? 'bg-green-900/20 text-green-400 border-green-800' 
-                : 'bg-red-900/20 text-red-400 border-red-800'
-            }`}>
-              <span className="font-medium">{message.text}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Prompt Edit Modal */}
-      {showPromptModal && promptData && (
-        <div 
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 z-50"
-          onClick={() => setShowPromptModal(false)}
-        >
-          <div 
-            className="bg-gray-900 rounded-2xl border border-gray-700 w-full max-w-4xl h-[95vh] overflow-hidden flex flex-col"
-            onClick={(e) => e.stopPropagation()}
+          <button
+            onClick={handleTraining}
+            disabled={isTraining}
+            className={`
+              w-full flex items-center justify-center space-x-2 py-4 px-6 rounded-xl font-medium transition-all duration-200 mt-8
+              ${isTraining
+                ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700 text-white hover:scale-105'
+              }
+            `}
           >
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-5 border-b border-gray-700 flex-shrink-0">
-              <div className="flex items-center space-x-3">
-                <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center">
-                  <CheckCircle className="w-6 h-6 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-2xl font-light text-white">Prompts Gerados com Sucesso!</h2>
-                  <p className="text-green-400 text-sm">Edite e salve seus prompts personalizados</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowPromptModal(false)}
-                className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all duration-200"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            {/* Modal Content */}
-            <div className="p-5 flex-1 flex flex-col overflow-hidden">
-              {/* Success Message */}
-              {modalMessage && (
-                <div className={`p-4 rounded-xl text-center border ${
-                  modalMessage.type === 'success' 
-                    ? 'bg-green-900/20 text-green-400 border-green-800' 
-                    : 'bg-red-900/20 text-red-400 border-red-800'
-                }`}>
-                  <div className="flex items-center justify-center space-x-2">
-                    {modalMessage.type === 'success' ? (
-                      <CheckCircle className="w-5 h-5" />
-                    ) : (
-                      <X className="w-5 h-5" />
-                    )}
-                    <span className="font-medium">{modalMessage.text}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* Channel Name (Read-only) */}
-              <div className="space-y-1 mb-4">
-                <label className="block text-sm font-medium text-gray-300">
-                  Nome do Canal
-                </label>
-                <input
-                  type="text"
-                  value={promptData.channelName}
-                  readOnly
-                  className="w-full p-3 bg-gray-800 border border-gray-600 rounded-lg text-white cursor-not-allowed opacity-75"
-                />
-              </div>
-
-              {/* Split Layout for Both Prompts */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
-                {/* Title Prompt */}
-                <div className="space-y-2 flex flex-col">
-                  <div className="flex items-center space-x-2 mb-3">
-                    <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                    <label className="block text-sm font-medium text-gray-300">
-                      Prompt de Título
-                    </label>
-                  </div>
-                  <textarea
-                    value={editedTitlePrompt}
-                    onChange={(e) => setEditedTitlePrompt(e.target.value)}
-                    className="w-full flex-1 p-3 bg-black border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500 text-sm font-mono resize-none"
-                    placeholder="Prompt para geração de títulos..."
-                  />
-                  <div className="text-xs text-gray-400">
-                    {editedTitlePrompt.length.toLocaleString()} caracteres
-                  </div>
-                </div>
-
-                {/* Script Prompt */}
-                <div className="space-y-2 flex flex-col">
-                  <div className="flex items-center space-x-2 mb-3">
-                    <div className="w-3 h-3 bg-purple-500 rounded-full"></div>
-                    <label className="block text-sm font-medium text-gray-300">
-                      Prompt de Roteiro
-                    </label>
-                  </div>
-                  <textarea
-                    value={editedScriptPrompt}
-                    onChange={(e) => setEditedScriptPrompt(e.target.value)}
-                    className="w-full flex-1 p-3 bg-black border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500 text-sm font-mono resize-none"
-                    placeholder="Prompt para geração de roteiros..."
-                  />
-                  <div className="text-xs text-gray-400">
-                    {editedScriptPrompt.length.toLocaleString()} caracteres
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Voice Preference and Media Characters - Footer Section */}
-            <div className="p-5 border-t border-gray-700 bg-gray-900/50">
-              {/* Voice Preference and Media Characters - Same Line */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {/* Voice Preference */}
-                <div className="space-y-1">
-                  <label className="block text-sm font-medium text-gray-300">
-                    Voz Preferida
-                  </label>
-                  {isLoadingVoices ? (
-                    <div className="flex items-center space-x-2 p-3 bg-gray-800 border border-gray-600 rounded-lg">
-                      <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
-                      <span className="text-gray-400 text-sm">Carregando vozes...</span>
-                    </div>
-                  ) : (
-                    <select
-                      value={selectedVoiceId || ''}
-                      onChange={(e) => setSelectedVoiceId(e.target.value ? parseInt(e.target.value) : null)}
-                      className="w-full p-3 bg-black border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white"
-                    >
-                      <option value="">Selecione uma voz</option>
-                      {voices.map((voice) => (
-                        <option key={voice.id} value={voice.id}>
-                          {voice.nome_voz} - {voice.plataforma}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  <div className="text-xs text-gray-400">
-                    Voz que será usada para gerar áudios deste canal
-                  </div>
-                  
-                  {/* Voice Preview Button */}
-                  {selectedVoiceId && (
-                    <div className="mt-2">
-                      <button
-                        onClick={playSelectedVoicePreview}
-                        disabled={selectedVoiceId ? testingVoices.has(selectedVoiceId) : false}
-                        className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm transition-all duration-200 ${
-                          selectedVoiceId && testingVoices.has(selectedVoiceId)
-                            ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                            : isAudioPlaying(`voice-preview-${selectedVoiceId}`)
-                            ? 'bg-red-600 hover:bg-red-700 text-white'
-                            : 'bg-green-600 hover:bg-green-700 text-white'
-                        }`}
-                      >
-                        {selectedVoiceId && testingVoices.has(selectedVoiceId) ? (
-                          <>
-                            <Loader2 className="w-4 h-4 animate-spin" />
-                            <span>Carregando...</span>
-                          </>
-                        ) : isAudioPlaying(`voice-preview-${selectedVoiceId}`) ? (
-                          <>
-                            <Square className="w-4 h-4" />
-                            <span>Parar</span>
-                          </>
-                        ) : (
-                          <>
-                            <Play className="w-4 h-4" />
-                            <span>Testar Voz</span>
-                          </>
-                        )}
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Media Characters */}
-                <div className="space-y-1">
-                  <label className="block text-sm font-medium text-gray-300">
-                    Média de Caracteres
-                  </label>
-                  <input
-                    type="number"
-                    value={mediaChars}
-                    onChange={(e) => setMediaChars(e.target.value)}
-                    placeholder="Ex: 1500"
-                    min="0"
-                    step="1"
-                    maxLength={8}
-                    className="w-full p-3 bg-black border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500"
-                  />
-                  <div className="text-xs text-gray-400">
-                    Número médio de caracteres dos roteiros deste canal
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Modal Footer */}
-            <div className="flex items-center justify-between p-5 border-t border-gray-700 flex-shrink-0 bg-gray-900">
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={copyToClipboard}
-                  className="flex items-center space-x-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-all duration-200"
-                >
-                  <Copy className="w-4 h-4" />
-                  <span>Copiar</span>
-                </button>
-                <button
-                  onClick={downloadPrompt}
-                  className="flex items-center space-x-2 px-4 py-2 bg-gray-800 hover:bg-gray-700 text-white rounded-lg transition-all duration-200"
-                >
-                  <Download className="w-4 h-4" />
-                  <span>Download</span>
-                </button>
-              </div>
-              
-              <div className="flex items-center space-x-3">
-                <button
-                  onClick={() => setShowPromptModal(false)}
-                  className="px-6 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all duration-200"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={updatePromptInDatabase}
-                  disabled={isUpdatingPrompt}
-                  className={`
-                    flex items-center space-x-2 px-6 py-2 rounded-lg font-medium transition-all duration-200
-                    ${isUpdatingPrompt
-                      ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
-                      : 'bg-blue-600 hover:bg-blue-700 text-white'
-                    }
-                  `}
-                >
-                  {isUpdatingPrompt ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Salvando...</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-4 h-4" />
-                      <span>Atualizar Prompts</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-// Script Input Card Component
-interface ScriptInputCardProps {
-  title: string;
-  script: ScriptData;
-  onUpdate: (data: Partial<ScriptData>) => void;
-}
-
-const ScriptInputCard: React.FC<ScriptInputCardProps> = ({ title, script, onUpdate }) => {
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const [isDragOver, setIsDragOver] = useState(false);
-
-  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      onUpdate({ file, type: 'file', text: '' });
-    }
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(true);
-  };
-
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDragOver(false);
-    
-    const files = e.dataTransfer.files;
-    if (files.length > 0) {
-      const file = files[0];
-      const acceptedTypes = ['.txt', '.doc', '.docx', '.pdf'];
-      const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase();
-      
-      if (acceptedTypes.includes(fileExtension)) {
-        onUpdate({ file, type: 'file', text: '' });
-      }
-    }
-  };
-
-  const clearContent = () => {
-    onUpdate({ text: '', file: null, type: 'text', title: '', thumbText: '' });
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const switchToText = () => {
-    onUpdate({ type: 'text', file: null });
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
-
-  const switchToFile = () => {
-    fileInputRef.current?.click();
-  };
-
-  return (
-    <div 
-      className={`bg-gray-800/50 rounded-xl border transition-all duration-300 ${
-        isDragOver 
-          ? 'border-blue-500 bg-blue-900/20' 
-          : 'border-gray-700 hover:border-gray-600'
-      }`}
-      onDragOver={handleDragOver}
-      onDragLeave={handleDragLeave}
-      onDrop={handleDrop}
-    >
-      {/* Card Header */}
-      <div className="p-4 border-b border-gray-700">
-        <div className="flex items-center justify-between">
-          <h3 className="font-medium text-white">{title}</h3>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={switchToText}
-              className={`p-2 rounded-lg transition-all duration-200 ${
-                script.type === 'text'
-                  ? 'bg-blue-900/30 text-blue-400'
-                  : 'text-gray-500 hover:text-gray-300 hover:bg-gray-700'
-              }`}
-              title="Texto"
-            >
-              <Type className="w-4 h-4" />
-            </button>
-            <button
-              onClick={switchToFile}
-              className={`p-2 rounded-lg transition-all duration-200 ${
-                script.type === 'file'
-                  ? 'bg-blue-900/30 text-blue-400'
-                  : 'text-gray-500 hover:text-gray-300 hover:bg-gray-700'
-              }`}
-              title="Arquivo"
-            >
-              <Upload className="w-4 h-4" />
-            </button>
-            {(script.text || script.file) && (
-              <button
-                onClick={clearContent}
-                className="p-2 text-gray-500 hover:text-red-400 hover:bg-red-900/20 rounded-lg transition-all duration-200"
-                title="Limpar"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Card Content */}
-      <div className="p-4">
-        {/* Title Field */}
-        <div className="space-y-2 mb-4">
-          <label className="block text-sm font-medium text-gray-300">
-            Título do {title}
-          </label>
-          <input
-            type="text"
-            value={script.title}
-            onChange={(e) => onUpdate({ title: e.target.value })}
-            placeholder="Digite o título do roteiro..."
-            className="w-full p-3 bg-black border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500"
-          />
-        </div>
-
-        {/* Thumb Text Field */}
-        <div className="space-y-2 mb-4">
-          <label className="block text-sm font-medium text-gray-300">
-            Texto da Thumb
-          </label>
-          <input
-            type="text"
-            value={script.thumbText}
-            onChange={(e) => onUpdate({ thumbText: e.target.value })}
-            placeholder="Digite o texto que aparece na thumbnail..."
-            className="w-full p-3 bg-black border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500"
-          />
-        </div>
-
-        {script.type === 'text' ? (
-          <div className="space-y-3">
-            <textarea
-              value={script.text}
-              onChange={(e) => onUpdate({ text: e.target.value })}
-              placeholder="Cole o conteúdo do roteiro aqui..."
-              className="w-full h-32 p-3 bg-black border border-gray-700 rounded-lg resize-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500 text-sm"
-            />
-            {script.text && (
-              <div className="text-xs text-gray-400">
-                {script.text.length} caracteres
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <input
-              ref={fileInputRef}
-              type="file"
-              onChange={handleFileSelect}
-              accept=".txt,.doc,.docx,.pdf"
-              className="hidden"
-            />
-            
-            {script.file ? (
-              <div className="flex items-center justify-between p-3 bg-gray-700/50 border border-gray-600 rounded-lg">
-                <div className="flex items-center space-x-3">
-                  <div className="w-8 h-8 bg-blue-900/30 rounded-lg flex items-center justify-center">
-                    <FileText className="w-4 h-4 text-blue-400" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-white">{script.file.name}</p>
-                    <p className="text-xs text-gray-400">
-                      {(script.file.size / 1024).toFixed(1)} KB
-                    </p>
-                  </div>
-                </div>
-              </div>
+            {isTraining ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <span>Treinando Canal...</span>
+              </>
             ) : (
-              <div
-                onClick={switchToFile}
-                className={`w-full h-32 border-2 border-dashed rounded-lg flex flex-col items-center justify-center transition-all duration-300 cursor-pointer ${
-                  isDragOver
-                    ? 'border-blue-400 text-blue-400 bg-blue-900/10'
-                    : 'border-gray-600 text-gray-400 hover:border-gray-500 hover:text-gray-300'
-                }`}
-              >
-                <Upload className={`w-6 h-6 mb-2 transition-transform duration-300 ${
-                  isDragOver ? 'scale-110' : 'hover:scale-110'
-                }`} />
-                <span className="text-sm font-medium">
-                  {isDragOver ? 'Solte o arquivo aqui' : 'Clique ou arraste'}
-                </span>
-                <span className="text-xs text-gray-500 mt-1">TXT, DOC, DOCX, PDF</span>
-              </div>
+              <>
+                <BookOpen className="w-5 h-5" />
+                <span>Treinar Canal</span>
+              </>
             )}
-          </div>
-        )}
+          </button>
+        </div>
       </div>
     </div>
   );

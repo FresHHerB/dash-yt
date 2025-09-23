@@ -16,7 +16,8 @@ import {
   Video,
   Trash2,
   Edit3,
-  CheckCircle
+  CheckCircle,
+  Copy
 } from 'lucide-react';
 import { PageType } from '../App';
 import PageHeader from './shared/PageHeader';
@@ -920,6 +921,23 @@ const ScriptDetailModal: React.FC<ScriptDetailModalProps> = ({
     }
   };
 
+  const copyAllContent = async () => {
+    const allContent = `###TITULO
+${script.titulo || 'Sem título'}
+
+###TEXT_THUMB
+${script.text_thumb || 'Sem texto da thumb'}
+
+###ROTEIRO
+${script.roteiro}`;
+
+    try {
+      await navigator.clipboard.writeText(allContent);
+      // Você pode adicionar uma mensagem de sucesso aqui se desejar
+    } catch (err) {
+      console.error('Erro ao copiar tudo:', err);
+    }
+  };
   return (
     <div 
       className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 z-50"
@@ -1230,6 +1248,13 @@ const ScriptDetailModal: React.FC<ScriptDetailModalProps> = ({
             </>
           ) : (
             <>
+              <button
+                onClick={copyAllContent}
+                className="flex items-center space-x-2 px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-all duration-200"
+              >
+                <Copy className="w-4 h-4" />
+                <span>Copiar Tudo</span>
+              </button>
               <button
                 onClick={onToggleEditMode}
                 className="flex items-center space-x-2 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-all duration-200"

@@ -11,7 +11,7 @@ export const env = {
     baseUrl: import.meta.env.VITE_WEBHOOK_BASE_URL || '',
     endpoints: {
       updatePrompts: import.meta.env.VITE_WEBHOOK_UPDATE_PROMPTS || '/webhook/updatePrompts',
-      generateContent: import.meta.env.VITE_WEBHOOK_GENERATE_CONTENT || '/webhook/gerarConteudo', // Deprecated - manter para compatibilidade
+      trainChannel: import.meta.env.VITE_WEBHOOK_TRAIN_CHANNEL || '/webhook/guiaRoteiro',
       generateScript: import.meta.env.VITE_WEBHOOK_GENERATE_SCRIPT || '/webhook-test/gerarRoteiro',
       generateScriptAndAudio: import.meta.env.VITE_WEBHOOK_GENERATE_SCRIPT_AND_AUDIO || '/webhook/gerarRoteiroeAudio',
       generateAudio: import.meta.env.VITE_WEBHOOK_GENERATE_AUDIO || '/webhook/gerarAudio',
@@ -40,9 +40,18 @@ export const validateEnvironment = (): { isValid: boolean; missingVars: string[]
     { key: 'VITE_WEBHOOK_BASE_URL', value: env.webhooks.baseUrl },
   ];
 
-  const missingVars = requiredVars
-    .filter(({ value }) => !value || value.trim() === '')
-    .map(({ key }) => key);
+  const missingVars: string[] = [];
+
+  requiredVars.forEach(({ key, value }) => {
+    if (!value || value.trim() === '') {
+      missingVars.push(key);
+    } else if (key === 'VITE_SUPABASE_URL' || key === 'VITE_WEBHOOK_BASE_URL') {
+      // Check if URL has proper protocol
+      if (!value.startsWith('http://') && !value.startsWith('https://')) {
+        missingVars.push(`${key} (missing protocol - must start with http:// or https://)`);
+      }
+    }
+  });
 
   return {
     isValid: missingVars.length === 0,

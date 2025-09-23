@@ -310,7 +310,7 @@
           "parameters": [
             {
               "name": "text",
-              "value": "={{ $('Loop Over Items').item.json.trecho }}"
+              "value": "={{ $('Loop Over Items').first().json.trecho }}"
             },
             {
               "name": "reference_id",
@@ -392,7 +392,7 @@
         },
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"text\": \"{{ $('Loop Over Items').item.json.trecho }}\",\n  \"model_id\": \"eleven_multilingual_v2\",\n  \"voice_settings\": {\n    \"speed\": {{ $('setParam').first().json.speed }}\n  }\n}",
+        "jsonBody": "={\n  \"text\": \"{{ $('Loop Over Items').first().json.trecho }}\",\n  \"model_id\": \"eleven_multilingual_v2\",\n  \"voice_settings\": {\n    \"speed\": {{ $('setParam').first().json.speed }}\n  }\n}",
         "options": {
           "response": {
             "response": {
@@ -1424,7 +1424,7 @@
   "settings": {
     "executionOrder": "v1"
   },
-  "versionId": "1a0292d8-93b8-43fc-af38-b639fb40a25d",
+  "versionId": "c5657bf8-8d12-4ff9-a722-21b2286be822",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "c6fbb6bd9dd871ca93aa227002d9065607edffcef72444963c91c9c146b6ac39"

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { buildWebhookUrl } from '../config/environment';
-import { 
+import {
   Play,
   Square,
   Download,
@@ -35,6 +35,7 @@ interface Script {
   created_at: string;
   audio_path?: string;
   text_thumb?: string;
+  ideia_base?: string;
 }
 
 interface ChannelWithScripts extends Channel {
@@ -46,6 +47,7 @@ interface GeneratedScriptsPageProps {
   onBack: () => void;
   onNavigate?: (page: PageType) => void;
 }
+
 
 const GeneratedScriptsPage: React.FC<GeneratedScriptsPageProps> = ({ user, onBack, onNavigate }) => {
   const [channelsWithScripts, setChannelsWithScripts] = useState<ChannelWithScripts[]>([]);
@@ -91,7 +93,7 @@ const GeneratedScriptsPage: React.FC<GeneratedScriptsPageProps> = ({ user, onBac
       // Buscar roteiros para cada canal
       const { data: scriptsData, error: scriptsError } = await supabase
         .from('roteiros')
-        .select('id, roteiro, titulo, canal_id, created_at, audio_path, text_thumb')
+        .select('id, roteiro, titulo, canal_id, created_at, audio_path, text_thumb, ideia_base')
         .order('created_at', { ascending: false });
 
       if (scriptsError) {
@@ -1023,6 +1025,16 @@ const ScriptDetailModal: React.FC<ScriptDetailModalProps> = ({
               </div>
             )}
           </div>
+
+          {/* Ideia Base Section */}
+          {script.ideia_base && (
+            <div className="mb-6">
+              <h3 className="text-lg font-medium text-gray-300 mb-2">Ideia Base</h3>
+              <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-4">
+                <p className="text-blue-400">{script.ideia_base}</p>
+              </div>
+            </div>
+          )}
 
           {/* Thumb Text Section */}
           {script.text_thumb && !isEditMode && (

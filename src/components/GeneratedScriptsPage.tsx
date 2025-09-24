@@ -990,24 +990,13 @@ ${script.roteiro}`;
             </div>
           )}
 
-          {/* Thumb Text Field in Edit Mode */}
-          {isEditMode && (
-            <div className="space-y-2 mb-6">
-              <label className="block text-sm font-medium text-gray-300">
-                Texto da Thumb
-              </label>
-              <input
-                type="text"
-                value={script.text_thumb || ''}
-                onChange={(e) => {
-                  // Update the selectedScript with new thumb text
-                  const updatedScript = { ...script, text_thumb: e.target.value };
-                  // This would need to be passed as a prop to update the parent state
-                  // For now, we'll show it as read-only in edit mode
-                }}
-                className="w-full p-4 bg-black border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500"
-                placeholder="Digite o texto da thumbnail..."
-              />
+          {/* Ideia Base Section */}
+          {script.ideia_base && (
+            <div className="mb-6">
+              <h3 className="text-lg font-medium text-gray-300 mb-2">Ideia Base</h3>
+              <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-4">
+                <p className="text-blue-400">{script.ideia_base}</p>
+              </div>
             </div>
           )}
 
@@ -1044,16 +1033,6 @@ ${script.roteiro}`;
             )}
           </div>
 
-          {/* Ideia Base Section */}
-          {script.ideia_base && (
-            <div className="mb-6">
-              <h3 className="text-lg font-medium text-gray-300 mb-2">Ideia Base</h3>
-              <div className="bg-blue-900/20 border border-blue-800 rounded-lg p-4">
-                <p className="text-blue-400">{script.ideia_base}</p>
-              </div>
-            </div>
-          )}
-
           {/* Thumb Text Section */}
           {script.text_thumb && !isEditMode && (
             <div className="mb-6">
@@ -1061,6 +1040,27 @@ ${script.roteiro}`;
               <div className="bg-orange-900/20 border border-orange-800 rounded-lg p-4">
                 <p className="text-orange-400 font-medium">{script.text_thumb}</p>
               </div>
+            </div>
+          )}
+
+          {/* Thumb Text Field in Edit Mode */}
+          {isEditMode && (
+            <div className="space-y-2 mb-6">
+              <label className="block text-sm font-medium text-gray-300">
+                Texto da Thumb
+              </label>
+              <input
+                type="text"
+                value={script.text_thumb || ''}
+                onChange={(e) => {
+                  // Update the selectedScript with new thumb text
+                  const updatedScript = { ...script, text_thumb: e.target.value };
+                  // This would need to be passed as a prop to update the parent state
+                  // For now, we'll show it as read-only in edit mode
+                }}
+                className="w-full p-4 bg-black border border-gray-700 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500"
+                placeholder="Digite o texto da thumbnail..."
+              />
             </div>
           )}
 

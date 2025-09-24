@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { buildWebhookUrl, buildElevenLabsUrl, buildFishAudioUrl } from '../config/environment';
-import { 
-  Edit3, 
-  X, 
-  Loader2, 
+import {
+  Edit3,
+  X,
+  Loader2,
   CheckCircle,
   Copy,
   Download,
@@ -12,6 +12,7 @@ import {
   Play,
   Square,
   Trash2,
+  Files,
 } from 'lucide-react';
 import { PageType } from '../App';
 import PageHeader from './shared/PageHeader';
@@ -60,6 +61,10 @@ const PromptManagementPage: React.FC<PromptManagementPageProps> = ({ user, onBac
   const [deletingChannels, setDeletingChannels] = useState<Set<number>>(new Set());
   const [channelToDelete, setChannelToDelete] = useState<Channel | null>(null);
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const [showCopyChannelsModal, setShowCopyChannelsModal] = useState(false);
+  const [selectedChannelIds, setSelectedChannelIds] = useState<Set<number>>(new Set());
+  const [channelNames, setChannelNames] = useState<Record<number, string>>({});
+  const [isCopyingChannels, setIsCopyingChannels] = useState(false);
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('pt-BR', {
@@ -103,13 +108,13 @@ const PromptManagementPage: React.FC<PromptManagementPageProps> = ({ user, onBac
 
       console.log('✅ Canal excluído com sucesso:', channelToDelete.nome_canal);
       setMessage({ type: 'success', text: 'Canal excluído com sucesso!' });
-      
+
       // Atualizar a lista de canais
       await loadChannels();
-      
+
       // Fechar modal de confirmação
       closeDeleteConfirmation();
-      
+
     } catch (error) {
       console.error('❌ Erro ao excluir canal:', error);
       setMessage({ type: 'error', text: 'Erro ao excluir canal. Tente novamente.' });
@@ -119,6 +124,118 @@ const PromptManagementPage: React.FC<PromptManagementPageProps> = ({ user, onBac
         newSet.delete(channelToDelete.id);
         return newSet;
       });
+    }
+  };
+
+  const openCopyChannelsModal = () => {
+    setShowCopyChannelsModal(true);
+    setSelectedChannelIds(new Set());
+    setChannelNames({});
+  };
+
+  const closeCopyChannelsModal = () => {
+    setShowCopyChannelsModal(false);
+    setSelectedChannelIds(new Set());
+    setChannelNames({});
+  };
+
+  const toggleChannelSelection = (channelId: number) => {
+    const channel = channels.find(c => c.id === channelId);
+    if (!channel) return;
+
+    setSelectedChannelIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(channelId)) {
+        newSet.delete(channelId);
+        // Remove o nome quando desseleciona
+        setChannelNames(prevNames => {
+          const newNames = { ...prevNames };
+          delete newNames[channelId];
+          return newNames;
+        });
+      } else {
+        newSet.add(channelId);
+        // Adiciona nome padrão quando seleciona
+        setChannelNames(prevNames => ({
+          ...prevNames,
+          [channelId]: `${channel.nome_canal} - Cópia`
+        }));
+      }
+      return newSet;
+    });
+  };
+
+  const updateChannelName = (channelId: number, name: string) => {
+    setChannelNames(prevNames => ({
+      ...prevNames,
+      [channelId]: name
+    }));
+  };
+
+  const copySelectedChannels = async () => {
+    if (selectedChannelIds.size === 0) {
+      setMessage({ type: 'error', text: 'Selecione pelo menos um canal para copiar.' });
+      return;
+    }
+
+    // Verificar se todos os canais selecionados têm nomes
+    const missingNames = Array.from(selectedChannelIds).filter(
+      channelId => !channelNames[channelId] || channelNames[channelId].trim() === ''
+    );
+
+    if (missingNames.length > 0) {
+      setMessage({ type: 'error', text: 'Preencha o nome para todos os canais selecionados.' });
+      return;
+    }
+
+    setIsCopyingChannels(true);
+    setMessage(null);
+
+    try {
+      console.log('🚀 Iniciando cópia de canais...');
+
+      const payload = {
+        canais: Array.from(selectedChannelIds).map(channelId => ({
+          id_canal: channelId,
+          nome_canal: channelNames[channelId] || `Canal ${channelId} - Cópia`
+        }))
+      };
+
+      console.log('📤 Payload enviado:', payload);
+
+      const response = await fetch(buildWebhookUrl('copyChannels'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      console.log('📡 Response status:', response.status);
+
+      if (response.ok) {
+        const result = await response.json();
+        console.log('✅ Canais copiados com sucesso:', result);
+
+        setMessage({ type: 'success', text: `${selectedChannelIds.size} canal(is) copiado(s) com sucesso!` });
+
+        // Atualizar a lista de canais
+        await loadChannels();
+
+        // Fechar modal
+        closeCopyChannelsModal();
+      } else {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`);
+      }
+    } catch (err) {
+      console.error('❌ Erro na cópia de canais:', err);
+      setMessage({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Erro ao copiar canais. Tente novamente.'
+      });
+    } finally {
+      setIsCopyingChannels(false);
     }
   };
 
@@ -476,11 +593,24 @@ const PromptManagementPage: React.FC<PromptManagementPageProps> = ({ user, onBac
       <div className="max-w-7xl mx-auto px-6 pt-32 pb-12">
         {message && (
           <div className={`max-w-md mx-auto mb-8 p-4 rounded-xl text-center border ${
-            message.type === 'success' 
-              ? 'bg-green-900/20 text-green-400 border-green-800' 
+            message.type === 'success'
+              ? 'bg-green-900/20 text-green-400 border-green-800'
               : 'bg-red-900/20 text-red-400 border-red-800'
           }`}>
             <span className="font-medium">{message.text}</span>
+          </div>
+        )}
+
+        {/* Copy Channels Button */}
+        {channels.length > 0 && (
+          <div className="flex justify-end mb-6">
+            <button
+              onClick={openCopyChannelsModal}
+              className="flex items-center space-x-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-all duration-200 transform hover:scale-105"
+            >
+              <Files className="w-5 h-5" />
+              <span>Copiar Canais</span>
+            </button>
           </div>
         )}
 
@@ -515,6 +645,183 @@ const PromptManagementPage: React.FC<PromptManagementPageProps> = ({ user, onBac
           </div>
         )}
       </div>
+
+      {/* Copy Channels Modal */}
+      {showCopyChannelsModal && (
+        <div
+          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-6 z-50"
+          onClick={closeCopyChannelsModal}
+        >
+          <div
+            className="bg-gray-900 rounded-2xl border border-gray-700 w-full max-w-2xl max-h-[80vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-gray-700 flex-shrink-0">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 bg-blue-500 rounded-xl flex items-center justify-center">
+                  <Files className="w-6 h-6 text-white" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-medium text-white">Copiar Canais</h2>
+                  <p className="text-sm text-gray-400">Selecione os canais que deseja copiar</p>
+                </div>
+              </div>
+              <button
+                onClick={closeCopyChannelsModal}
+                className="p-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all duration-200"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            {/* Selection Info */}
+            <div className="p-4 bg-gray-800/50 border-b border-gray-700 flex-shrink-0">
+              <div className="flex items-center justify-between">
+                <span className="text-sm text-gray-300">
+                  {selectedChannelIds.size > 0
+                    ? `${selectedChannelIds.size} canal(is) selecionado(s)`
+                    : 'Nenhum canal selecionado'
+                  }
+                </span>
+                {channels.length > 0 && (
+                  <div className="flex space-x-2">
+                    <button
+                      onClick={() => setSelectedChannelIds(new Set(channels.map(c => c.id)))}
+                      className="text-xs px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+                    >
+                      Selecionar Todos
+                    </button>
+                    <button
+                      onClick={() => setSelectedChannelIds(new Set())}
+                      className="text-xs px-3 py-1 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+                    >
+                      Limpar Seleção
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Channels List */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="space-y-4">
+                {channels.map((channel) => (
+                  <div
+                    key={channel.id}
+                    className={`
+                      border rounded-xl p-4 transition-all duration-200
+                      ${selectedChannelIds.has(channel.id)
+                        ? 'bg-blue-600/20 border-blue-500 shadow-lg'
+                        : 'bg-gray-800/50 border-gray-700 hover:border-gray-600'
+                      }
+                    `}
+                  >
+                    {/* Channel Selection Header */}
+                    <div
+                      onClick={() => toggleChannelSelection(channel.id)}
+                      className="flex items-center space-x-4 cursor-pointer mb-3"
+                    >
+                      {/* Checkbox */}
+                      <div className={`
+                        w-6 h-6 rounded border-2 flex items-center justify-center transition-all duration-200
+                        ${selectedChannelIds.has(channel.id)
+                          ? 'bg-blue-600 border-blue-500'
+                          : 'border-gray-600 hover:border-gray-500'
+                        }
+                      `}>
+                        {selectedChannelIds.has(channel.id) && (
+                          <CheckCircle className="w-4 h-4 text-white" />
+                        )}
+                      </div>
+
+                      {/* Channel Info */}
+                      <div className="flex-1">
+                        <div className="flex items-center space-x-3">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
+                            ['bg-blue-500', 'bg-purple-500', 'bg-pink-500', 'bg-indigo-500', 'bg-cyan-500', 'bg-orange-500'][channel.id % 6]
+                          }`}>
+                            <Video className="w-5 h-5 text-white" />
+                          </div>
+                          <div>
+                            <h3 className="font-medium text-white">{channel.nome_canal}</h3>
+                            <p className="text-sm text-gray-400">ID: {channel.id}</p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Status Indicators */}
+                      <div className="flex items-center space-x-2">
+                        {channel.prompt_roteiro && channel.prompt_roteiro.trim().length > 0 && (
+                          <div className="inline-flex items-center space-x-1 px-2 py-1 bg-green-900/30 text-green-400 border border-green-800 rounded-full text-xs">
+                            <div className="w-2 h-2 bg-green-400 rounded-full" />
+                            <span>Configurado</span>
+                          </div>
+                        )}
+                        {channel.media_chars && (
+                          <div className="inline-flex items-center space-x-1 px-2 py-1 bg-blue-900/30 text-blue-400 border border-blue-800 rounded-full text-xs">
+                            <span>{channel.media_chars.toLocaleString()} chars</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Name Input Field (only show when selected) */}
+                    {selectedChannelIds.has(channel.id) && (
+                      <div className="ml-10 space-y-2">
+                        <label className="block text-sm font-medium text-gray-300">
+                          Nome do novo canal:
+                        </label>
+                        <input
+                          type="text"
+                          value={channelNames[channel.id] || ''}
+                          onChange={(e) => updateChannelName(channel.id, e.target.value)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="w-full p-3 bg-black border border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all duration-200 text-white placeholder:text-gray-500"
+                          placeholder={`${channel.nome_canal} - Cópia`}
+                        />
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end space-x-3 p-6 border-t border-gray-700 flex-shrink-0">
+              <button
+                onClick={closeCopyChannelsModal}
+                className="px-6 py-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-lg transition-all duration-200"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={copySelectedChannels}
+                disabled={selectedChannelIds.size === 0 || isCopyingChannels}
+                className={`
+                  flex items-center space-x-2 px-6 py-2 rounded-lg font-medium transition-all duration-200
+                  ${selectedChannelIds.size === 0 || isCopyingChannels
+                    ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white'
+                  }
+                `}
+              >
+                {isCopyingChannels ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Copiando...</span>
+                  </>
+                ) : (
+                  <>
+                    <Files className="w-4 h-4" />
+                    <span>Copiar {selectedChannelIds.size > 0 ? `${selectedChannelIds.size} ` : ''}Canal(is)</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirmation && channelToDelete && (

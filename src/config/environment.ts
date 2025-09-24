@@ -18,6 +18,7 @@ export const env = {
       deleteScript: import.meta.env.VITE_WEBHOOK_DELETE_SCRIPT || '/webhook/excluirRoteiro',
       guideScript: import.meta.env.VITE_WEBHOOK_GUIDE_SCRIPT || '/webhook/guiaRoteiro',
       updateContent: import.meta.env.VITE_WEBHOOK_UPDATE_CONTENT || '/webhook-test/atualizarConteudo',
+      copyChannels: import.meta.env.VITE_WEBHOOK_COPY_CHANNELS || '/webhook/copiarCanal',
     }
   },
 

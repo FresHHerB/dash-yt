@@ -12,7 +12,9 @@ import {
   FileText,
   Users,
   Loader2,
-  MoreVertical
+  MoreVertical,
+  DollarSign,
+  Key
 } from 'lucide-react';
 
 interface MainDashboardProps {
@@ -31,10 +33,13 @@ const MainDashboard: React.FC<MainDashboardProps> = ({ user, onLogout, onNavigat
   });
   const [isLoadingStats, setIsLoadingStats] = useState(true);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [apiCredits, setApiCredits] = useState<{ platform: string; credits: number | string; isLoading: boolean }[]>([]);
+  const [isLoadingCredits, setIsLoadingCredits] = useState(true);
 
   useEffect(() => {
     console.log('📊 [DASHBOARD] useEffect - carregando estatísticas...');
     loadStatistics();
+    loadApiCredits();
   }, []);
 
   const loadStatistics = async () => {
@@ -77,6 +82,76 @@ const MainDashboard: React.FC<MainDashboardProps> = ({ user, onLogout, onNavigat
       });
     } finally {
       setIsLoadingStats(false);
+    }
+  };
+
+  const loadApiCredits = async () => {
+    setIsLoadingCredits(true);
+    try {
+      const { data: apis, error } = await supabase
+        .from('apis')
+        .select('id, plataforma, api_key')
+        .order('plataforma', { ascending: true });
+
+      if (error) throw error;
+
+      if (!apis || apis.length === 0) {
+        setApiCredits([]);
+        setIsLoadingCredits(false);
+        return;
+      }
+
+      const creditsPromises = apis
+        .filter(api => api.plataforma !== 'Minimax') // Filtrar Minimax
+        .map(async (api) => {
+          let credits: number | string = 'N/A';
+          try {
+            switch (api.plataforma) {
+              case 'OpenRouter':
+                const orResponse = await fetch('https://openrouter.ai/api/v1/credits', {
+                  headers: { 'Authorization': `Bearer ${api.api_key}` }
+                });
+                if (orResponse.ok) {
+                  const data = await orResponse.json();
+                  credits = `$${((data.data?.total_credits || 0) - (data.data?.total_usage || 0)).toFixed(2)}`;
+                }
+                break;
+
+              case 'Fish-Audio':
+                const faResponse = await fetch('https://api.fish.audio/wallet/self/api-credit', {
+                  headers: { 'Authorization': `Bearer ${api.api_key}` }
+                });
+                if (faResponse.ok) {
+                  const data = await faResponse.json();
+                  credits = `$${parseFloat(data.credit || 0).toFixed(2)}`;
+                }
+                break;
+
+              case 'ElevenLabs':
+                const elResponse = await fetch('https://api.elevenlabs.io/v1/user/subscription', {
+                  headers: { 'xi-api-key': api.api_key, 'Content-Type': 'application/json' }
+                });
+                if (elResponse.ok) {
+                  const data = await elResponse.json();
+                  const remaining = (data.character_limit || 0) - (data.character_count || 0);
+                  credits = `${remaining.toLocaleString('pt-BR')} chars`;
+                }
+                break;
+            }
+          } catch (err) {
+            console.error(`Erro ao buscar créditos de ${api.plataforma}:`, err);
+          }
+
+          return { platform: api.plataforma, credits, isLoading: false };
+        });
+
+      const results = await Promise.all(creditsPromises);
+      setApiCredits(results);
+    } catch (error) {
+      console.error('Erro ao carregar créditos:', error);
+      setApiCredits([]);
+    } finally {
+      setIsLoadingCredits(false);
     }
   };
 
@@ -248,6 +323,35 @@ const MainDashboard: React.FC<MainDashboardProps> = ({ user, onLogout, onNavigat
             );
           })}
         </div>
+
+        {/* API Credits Section */}
+        {apiCredits.length > 0 && (
+          <div className="mb-8">
+            <h3 className="text-2xl font-light text-white mb-4">Créditos das APIs</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {isLoadingCredits ? (
+                <div className="flex items-center justify-center py-8 col-span-full">
+                  <Loader2 className="w-6 h-6 text-gray-400 animate-spin" />
+                </div>
+              ) : (
+                apiCredits.map((api, index) => (
+                  <div
+                    key={index}
+                    className="bg-gradient-to-br from-green-900/20 to-emerald-900/20 border border-green-800/50 rounded-xl p-4"
+                  >
+                    <div className="flex items-center space-x-2 mb-2">
+                      <Key className="w-4 h-4 text-green-400" />
+                      <span className="text-gray-300 text-sm font-medium">{api.platform}</span>
+                    </div>
+                    <div className="text-emerald-400 text-xl font-bold">
+                      {api.credits}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Bottom Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

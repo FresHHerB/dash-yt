@@ -32,6 +32,13 @@ interface API {
   created_at: string;
 }
 
+interface APICredits {
+  apiId: number;
+  credits: number | null;
+  isLoading: boolean;
+  error: string | null;
+}
+
 interface Voice {
   id: number;
   nome_voz: string;
@@ -58,9 +65,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ user, onBack, onNavigate })
   const [isLoadingApis, setIsLoadingApis] = useState(true);
   const [isLoadingVoices, setIsLoadingVoices] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [apiCredits, setApiCredits] = useState<Map<number, APICredits>>(new Map());
   
   const platforms = ['Fish-Audio', 'ElevenLabs', 'Minimax'];
-  const allowedPlatforms = ['Fish-Audio', 'ElevenLabs', 'Minimax'];
+  const allowedPlatforms = ['Fish-Audio', 'ElevenLabs', 'Minimax', 'OpenRouter'];
   const [showApiModal, setShowApiModal] = useState(false);
   const [editingApi, setEditingApi] = useState<API | null>(null);
   const [apiForm, setApiForm] = useState({ plataforma: '', api_key: '' });
@@ -95,6 +103,12 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ user, onBack, onNavigate })
     loadApis();
     loadVoices();
   }, []);
+
+  useEffect(() => {
+    if (apis.length > 0) {
+      loadAllApiCredits();
+    }
+  }, [apis]);
 
   useEffect(() => {
     // Filter voices based on active filter
@@ -211,6 +225,126 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ user, onBack, onNavigate })
       setMessage({ type: 'error', text: 'Erro de conexão.' });
     } finally {
       setIsLoadingVoices(false);
+    }
+  };
+
+  // Fetch credits for OpenRouter
+  const fetchOpenRouterCredits = async (apiKey: string): Promise<number | null> => {
+    try {
+      const response = await fetch('https://openrouter.ai/api/v1/credits', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erro OpenRouter: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const totalCredits = data.data?.total_credits || 0;
+      const totalUsage = data.data?.total_usage || 0;
+      return totalCredits - totalUsage;
+    } catch (error) {
+      console.error('Erro ao buscar créditos OpenRouter:', error);
+      return null;
+    }
+  };
+
+  // Fetch credits for Fish-Audio
+  const fetchFishAudioCredits = async (apiKey: string): Promise<number | null> => {
+    try {
+      const response = await fetch('https://api.fish.audio/wallet/self/api-credit', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erro Fish-Audio: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return parseFloat(data.credit) || 0;
+    } catch (error) {
+      console.error('Erro ao buscar créditos Fish-Audio:', error);
+      return null;
+    }
+  };
+
+  // Fetch credits for ElevenLabs
+  const fetchElevenLabsCredits = async (apiKey: string): Promise<number | null> => {
+    try {
+      const response = await fetch('https://api.elevenlabs.io/v1/user/subscription', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          'xi-api-key': apiKey
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`Erro ElevenLabs: ${response.status}`);
+      }
+
+      const data = await response.json();
+      const characterLimit = data.character_limit || 0;
+      const characterCount = data.character_count || 0;
+      return characterLimit - characterCount;
+    } catch (error) {
+      console.error('Erro ao buscar créditos ElevenLabs:', error);
+      return null;
+    }
+  };
+
+  // Fetch credits for a specific API
+  const fetchApiCredits = async (api: API) => {
+    setApiCredits(prev => new Map(prev).set(api.id, {
+      apiId: api.id,
+      credits: null,
+      isLoading: true,
+      error: null
+    }));
+
+    let credits: number | null = null;
+    let error: string | null = null;
+
+    try {
+      switch (api.plataforma) {
+        case 'OpenRouter':
+          credits = await fetchOpenRouterCredits(api.api_key);
+          break;
+        case 'Fish-Audio':
+          credits = await fetchFishAudioCredits(api.api_key);
+          break;
+        case 'ElevenLabs':
+          credits = await fetchElevenLabsCredits(api.api_key);
+          break;
+        case 'Minimax':
+          // Minimax não tem endpoint público de créditos disponível
+          error = 'Consulta de créditos não disponível';
+          break;
+        default:
+          error = 'Plataforma não suportada';
+      }
+    } catch (err) {
+      error = err instanceof Error ? err.message : 'Erro ao buscar créditos';
+    }
+
+    setApiCredits(prev => new Map(prev).set(api.id, {
+      apiId: api.id,
+      credits,
+      isLoading: false,
+      error
+    }));
+  };
+
+  // Load credits for all APIs
+  const loadAllApiCredits = async () => {
+    for (const api of apis) {
+      await fetchApiCredits(api);
     }
   };
 
@@ -863,8 +997,10 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ user, onBack, onNavigate })
                   <ApiCard
                     key={api.id}
                     api={api}
+                    credits={apiCredits.get(api.id)}
                     onEdit={() => openApiModal(api)}
                     onDelete={() => deleteApi(api.id)}
+                    onRefreshCredits={() => fetchApiCredits(api)}
                   />
                 ))}
               </div>
@@ -1259,21 +1395,33 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ user, onBack, onNavigate })
 // API Card Component
 const ApiCard: React.FC<{
   api: API;
+  credits?: APICredits;
   onEdit: () => void;
   onDelete: () => void;
-}> = ({ api, onEdit, onDelete }) => {
+  onRefreshCredits: () => void;
+}> = ({ api, credits, onEdit, onDelete, onRefreshCredits }) => {
   const getPlatformColor = (platform: string) => {
     const colors = {
       'Fish-Audio': 'bg-cyan-500',
       'ElevenLabs': 'bg-purple-500',
-      'Minimax': 'bg-red-500'
+      'Minimax': 'bg-red-500',
+      'OpenRouter': 'bg-blue-500'
     };
     return colors[platform as keyof typeof colors] || 'bg-gray-500';
   };
 
+  const formatCredits = (value: number, platform: string): string => {
+    if (platform === 'ElevenLabs') {
+      // ElevenLabs usa caracteres, não dólares
+      return value.toLocaleString('pt-BR');
+    }
+    // OpenRouter e Fish-Audio usam dólares
+    return `$${value.toFixed(2)}`;
+  };
+
   return (
     <div className="bg-gray-800/50 rounded-xl p-4 border border-gray-700 hover:border-gray-600 transition-all duration-200">
-      <div className="flex items-center justify-between">
+      <div className="flex items-start justify-between mb-3">
         <div className="flex items-center space-x-3">
           <div className={`w-3 h-3 rounded-full ${getPlatformColor(api.plataforma)}`} />
           <div>
@@ -1284,6 +1432,14 @@ const ApiCard: React.FC<{
           </div>
         </div>
         <div className="flex items-center space-x-2">
+          <button
+            onClick={onRefreshCredits}
+            disabled={credits?.isLoading}
+            className="p-2 text-gray-400 hover:text-green-400 hover:bg-green-900/30 rounded-lg transition-all duration-200 disabled:opacity-50"
+            title="Atualizar créditos"
+          >
+            <RefreshCw className={`w-4 h-4 ${credits?.isLoading ? 'animate-spin' : ''}`} />
+          </button>
           <button
             onClick={onEdit}
             className="p-2 text-gray-400 hover:text-blue-400 hover:bg-blue-900/30 rounded-lg transition-all duration-200"
@@ -1297,6 +1453,34 @@ const ApiCard: React.FC<{
             <Trash2 className="w-4 h-4" />
           </button>
         </div>
+      </div>
+
+      {/* Credits Display */}
+      <div className="mt-3 pt-3 border-t border-gray-700">
+        {credits?.isLoading ? (
+          <div className="flex items-center space-x-2 text-gray-400 text-sm">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            <span>Carregando créditos...</span>
+          </div>
+        ) : credits?.error ? (
+          <div className="text-red-400 text-sm">
+            Erro ao carregar créditos
+          </div>
+        ) : credits?.credits !== null && credits?.credits !== undefined ? (
+          <div className="flex items-center justify-between bg-gradient-to-r from-green-900/20 to-emerald-900/20 border border-green-800/50 rounded-lg px-3 py-2">
+            <span className="text-gray-300 text-sm">
+              {api.plataforma === 'ElevenLabs' ? 'Caracteres disponíveis:' : 'Créditos disponíveis:'}
+            </span>
+            <span className="text-emerald-400 font-bold">
+              {formatCredits(credits.credits, api.plataforma)}
+              {api.plataforma === 'ElevenLabs' && ' caracteres'}
+            </span>
+          </div>
+        ) : (
+          <div className="text-gray-500 text-sm">
+            Créditos não disponíveis
+          </div>
+        )}
       </div>
     </div>
   );

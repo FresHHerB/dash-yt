@@ -17,7 +17,8 @@ import {
   Trash2,
   Edit3,
   CheckCircle,
-  Copy
+  Copy,
+  Filter
 } from 'lucide-react';
 import { PageType } from '../App';
 import PageHeader from './shared/PageHeader';
@@ -66,6 +67,8 @@ const GeneratedScriptsPage: React.FC<GeneratedScriptsPageProps> = ({ user, onBac
   const [editedScriptContent, setEditedScriptContent] = useState('');
   const [isUpdatingContent, setIsUpdatingContent] = useState(false);
   const [editModalMessage, setEditModalMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [selectedChannelIds, setSelectedChannelIds] = useState<Set<number>>(new Set());
+  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
 
   useEffect(() => {
     loadChannelsWithScripts();
@@ -114,6 +117,11 @@ const GeneratedScriptsPage: React.FC<GeneratedScriptsPageProps> = ({ user, onBac
       }
 
       setChannelsWithScripts(channelsWithScriptsData);
+
+      // Inicializar selectedChannelIds com todos os IDs de canais
+      if (selectedChannelIds.size === 0 && channelsWithScriptsData.length > 0) {
+        setSelectedChannelIds(new Set(channelsWithScriptsData.map(ch => ch.id)));
+      }
     } catch (err) {
       console.error('Erro ao carregar roteiros:', err);
       setMessage({ type: 'error', text: 'Erro ao carregar roteiros.' });
@@ -357,10 +365,34 @@ const GeneratedScriptsPage: React.FC<GeneratedScriptsPageProps> = ({ user, onBac
   };
 
   const getTotalWithAudio = () => {
-    return channelsWithScripts.reduce((total, channel) => 
+    return channelsWithScripts.reduce((total, channel) =>
       total + channel.scripts.filter(script => script.audio_path).length, 0
     );
   };
+
+  const toggleChannelSelection = (channelId: number) => {
+    setSelectedChannelIds(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(channelId)) {
+        newSet.delete(channelId);
+      } else {
+        newSet.add(channelId);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllChannels = () => {
+    setSelectedChannelIds(new Set(channelsWithScripts.map(ch => ch.id)));
+  };
+
+  const deselectAllChannels = () => {
+    setSelectedChannelIds(new Set());
+  };
+
+  const filteredChannels = channelsWithScripts.filter(channel =>
+    selectedChannelIds.has(channel.id)
+  );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
@@ -381,6 +413,79 @@ const GeneratedScriptsPage: React.FC<GeneratedScriptsPageProps> = ({ user, onBac
               : 'bg-red-900/20 text-red-400 border-red-800'
           }`}>
             <span className="font-medium">{message.text}</span>
+          </div>
+        )}
+
+        {/* Channel Filter */}
+        {!isLoading && channelsWithScripts.length > 0 && (
+          <div className="mb-8">
+            <div className="relative">
+              <button
+                onClick={() => setShowFilterDropdown(!showFilterDropdown)}
+                className="flex items-center space-x-3 px-6 py-3 bg-gray-900/50 backdrop-blur-xl rounded-xl border border-gray-800 hover:border-gray-700 transition-all duration-200"
+              >
+                <Filter className="w-5 h-5 text-gray-400" />
+                <span className="text-white font-medium">
+                  Filtrar Canais ({selectedChannelIds.size}/{channelsWithScripts.length})
+                </span>
+              </button>
+
+              {showFilterDropdown && (
+                <div className="absolute top-full mt-2 left-0 bg-gray-900 border border-gray-800 rounded-xl shadow-2xl z-10 min-w-[320px]">
+                  <div className="p-4 border-b border-gray-800">
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-white font-medium">Selecionar Canais</h3>
+                      <button
+                        onClick={() => setShowFilterDropdown(false)}
+                        className="text-gray-400 hover:text-white transition-colors"
+                      >
+                        <X className="w-5 h-5" />
+                      </button>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={selectAllChannels}
+                        className="px-3 py-1 text-xs bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-all duration-200"
+                      >
+                        Todos
+                      </button>
+                      <button
+                        onClick={deselectAllChannels}
+                        className="px-3 py-1 text-xs bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-all duration-200"
+                      >
+                        Nenhum
+                      </button>
+                    </div>
+                  </div>
+                  <div className="max-h-80 overflow-y-auto">
+                    {channelsWithScripts.map((channel) => {
+                      const channelColor = getChannelColor(channel.id);
+                      const isSelected = selectedChannelIds.has(channel.id);
+                      return (
+                        <label
+                          key={channel.id}
+                          className="flex items-center space-x-3 px-4 py-3 hover:bg-gray-800/50 cursor-pointer transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => toggleChannelSelection(channel.id)}
+                            className="w-4 h-4 rounded border-gray-600 text-blue-600 focus:ring-blue-500 focus:ring-offset-0"
+                          />
+                          <div className={`w-8 h-8 ${channelColor.bg} rounded-lg flex items-center justify-center flex-shrink-0`}>
+                            <Video className="w-4 h-4 text-white" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-white font-medium truncate">{channel.nome_canal}</div>
+                            <div className="text-xs text-gray-400">{channel.scripts.length} roteiros</div>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -441,9 +546,17 @@ const GeneratedScriptsPage: React.FC<GeneratedScriptsPageProps> = ({ user, onBac
             <h3 className="text-xl font-light text-white mb-2">Nenhum roteiro encontrado</h3>
             <p className="text-gray-400">Gere alguns roteiros primeiro na página de geração</p>
           </div>
+        ) : filteredChannels.length === 0 ? (
+          <div className="text-center py-20">
+            <div className="w-16 h-16 bg-gray-800 rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <Filter className="w-8 h-8 text-gray-400" />
+            </div>
+            <h3 className="text-xl font-light text-white mb-2">Nenhum canal selecionado</h3>
+            <p className="text-gray-400">Selecione pelo menos um canal no filtro acima</p>
+          </div>
         ) : (
           <div className="space-y-12">
-            {channelsWithScripts.map((channel) => (
+            {filteredChannels.map((channel) => (
               <ChannelSection
                 key={channel.id}
                 channel={channel}

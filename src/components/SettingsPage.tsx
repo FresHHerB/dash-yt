@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { audioApiService } from '../lib/audioApiService';
-import { buildElevenLabsUrl, buildFishAudioUrl } from '../config/environment';
+import { buildElevenLabsUrl, buildFishAudioUrl, env } from '../config/environment';
 import { 
   Settings, 
   ArrowLeft, 

@@ -470,33 +470,72 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ user, onBack, onNavigate })
         } else if (platform === 'Fish-Audio') {
           console.log('🐟 [collectVoiceData] Processando Fish-Audio...');
 
-          // Usar Edge Function para buscar dados do Fish-Audio (evita problemas de CORS)
-          const response = await fetch(`${env.supabase.url}/functions/v1/fetch-fish-audio-voice`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${env.supabase.anonKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              voice_id: voiceId,
-              api_key: apiData.api_key
-            })
-          });
+          let voiceData = null;
+          let usedFallback = false;
 
-          if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(`Erro Fish-Audio: ${response.status} - ${errorData.error || response.statusText}`);
+          try {
+            // Tentar chamada direta à API Fish-Audio (método preferencial)
+            console.log('🐟 [collectVoiceData] Tentando chamada direta à API...');
+            const directResponse = await fetch(buildFishAudioUrl(`/model/${voiceId}`), {
+              method: 'GET',
+              headers: {
+                'Authorization': `Bearer ${apiData.api_key}`,
+                'Content-Type': 'application/json'
+              }
+            });
+
+            if (directResponse.ok) {
+              const rawData = await directResponse.json();
+              console.log('✅ [collectVoiceData] Dados obtidos via chamada direta');
+
+              // Processar dados no mesmo formato da edge function
+              voiceData = {
+                voice_id: rawData._id,
+                nome_voz: rawData.title,
+                idioma: rawData.languages?.join(', ') || 'Não especificado',
+                genero: 'Não especificado',
+                preview_url: rawData.samples?.[0]?.audio || '',
+                author: rawData.author?.nickname || 'Desconhecido',
+                popularity: rawData.like_count || 0
+              };
+            } else {
+              throw new Error(`Direct API call failed: ${directResponse.status}`);
+            }
+          } catch (directError) {
+            // Fallback: usar Edge Function (evita problemas de CORS)
+            console.log('⚠️ [collectVoiceData] Chamada direta falhou, usando Edge Function fallback...');
+            usedFallback = true;
+
+            const response = await fetch(`${env.supabase.url}/functions/v1/fetch-fish-audio-voice`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${env.supabase.anonKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                voice_id: voiceId,
+                api_key: apiData.api_key
+              })
+            });
+
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({}));
+              throw new Error(`Erro Fish-Audio (Edge Function): ${response.status} - ${errorData.error || response.statusText}`);
+            }
+
+            const result = await response.json();
+            voiceData = result.data;
+            console.log('✅ [collectVoiceData] Dados obtidos via Edge Function');
           }
 
-          const result = await response.json();
-          const voiceData = result.data;
+          if (!voiceData) {
+            throw new Error('Não foi possível obter dados da voz');
+          }
 
-          console.log('🐟 [collectVoiceData] Fish Audio dados obtidos via Edge Function:', {
+          console.log(`🐟 [collectVoiceData] Fish Audio dados obtidos ${usedFallback ? 'via Edge Function' : 'via API direta'}:`, {
             voice_id: voiceData.voice_id,
             nome_voz: voiceData.nome_voz,
-            preview_url: voiceData.preview_url,
-            temSamples: !!voiceData.raw_data?.samples,
-            quantidadeSamples: voiceData.raw_data?.samples?.length || 0
+            preview_url: voiceData.preview_url
           });
 
           setCollectedVoiceData({
@@ -826,41 +865,57 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ user, onBack, onNavigate })
           throw new Error(`API key não encontrada para ${voice.plataforma}`);
         }
 
-        // Usar Edge Function para buscar dados do Fish-Audio (evita problemas de CORS)
-        const response = await fetch(`${env.supabase.url}/functions/v1/fetch-fish-audio-voice`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${env.supabase.anonKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            voice_id: voice.voice_id,
-            api_key: apiData.api_key
-          })
-        });
+        let previewUrl = null;
 
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(`Erro Fish-Audio: ${response.status} - ${errorData.error || response.statusText}`);
+        try {
+          // Tentar chamada direta à API Fish-Audio
+          const directResponse = await fetch(buildFishAudioUrl(`/model/${voice.voice_id}`), {
+            method: 'GET',
+            headers: {
+              'Authorization': `Bearer ${apiData.api_key}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (directResponse.ok) {
+            const rawData = await directResponse.json();
+            previewUrl = rawData.samples?.[0]?.audio || null;
+            console.log('🐟 Preview obtido via chamada direta');
+          } else {
+            throw new Error(`Direct API call failed: ${directResponse.status}`);
+          }
+        } catch (directError) {
+          // Fallback: usar Edge Function
+          console.log('⚠️ Preview via Edge Function fallback...');
+
+          const response = await fetch(`${env.supabase.url}/functions/v1/fetch-fish-audio-voice`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${env.supabase.anonKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              voice_id: voice.voice_id,
+              api_key: apiData.api_key
+            })
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`Erro Fish-Audio: ${response.status} - ${errorData.error || response.statusText}`);
+          }
+
+          const result = await response.json();
+          previewUrl = result.data?.preview_url || null;
+          console.log('🐟 Preview obtido via Edge Function');
         }
 
-        const result = await response.json();
-        const voiceData = result.data;
-
-        console.log('🐟 Fish Audio dados obtidos via Edge Function:', {
-          voice_id: voiceData.voice_id,
-          nome_voz: voiceData.nome_voz,
-          preview_url: voiceData.preview_url,
-          temSamples: !!voiceData.raw_data?.samples,
-          quantidadeSamples: voiceData.raw_data?.samples?.length || 0
-        });
-
         // Verifica se há preview_url disponível
-        if (!voiceData.preview_url) {
+        if (!previewUrl) {
           throw new Error('Nenhum preview de áudio disponível para esta voz Fish-Audio');
         }
 
-        return voiceData.preview_url;
+        return previewUrl;
       }
 
       // Minimax não tem teste de voz implementado ainda

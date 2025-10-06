@@ -29,3 +29,8 @@ dist-ssr
 .env.development.local
 .env.test.local
 .env.production.local
+
+# MCP and Claude Code configurations
+.mcp.json
+.claude/
+**/claude/settings.local.json

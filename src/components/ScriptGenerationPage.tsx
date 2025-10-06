@@ -327,25 +327,56 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
           throw new Error(`API key não encontrada para ${voice.plataforma}`);
         }
 
-        const response = await fetch(buildElevenLabsUrl(`/voices/${voice.voice_id}`), {
-          method: 'GET',
-          headers: {
-            'xi-api-key': apisData.api_key
-          },
-        });
+        let previewUrl = null;
 
-        if (!response.ok) {
-          const errorText = await response.text();
-          throw new Error(`Erro ElevenLabs: ${response.status} - ${errorText}`);
+        try {
+          // Tentar chamada direta à API ElevenLabs (método preferencial)
+          console.log('🎵 [generateVoiceTest] Tentando chamada direta à API ElevenLabs...');
+          const directResponse = await fetch(buildElevenLabsUrl(`/voices/${voice.voice_id}`), {
+            method: 'GET',
+            headers: {
+              'xi-api-key': apisData.api_key
+            },
+          });
+
+          if (directResponse.ok) {
+            const voiceData = await directResponse.json();
+            previewUrl = voiceData.preview_url;
+            console.log('✅ [generateVoiceTest] Preview obtido via chamada direta');
+          } else {
+            throw new Error(`Direct API call failed: ${directResponse.status}`);
+          }
+        } catch (directError) {
+          // Fallback: usar Edge Function
+          console.log('⚠️ [generateVoiceTest] Chamada direta falhou, usando Edge Function fallback...');
+
+          const response = await fetch(`${env.supabase.url}/functions/v1/fetch-elevenlabs-voice`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${env.supabase.anonKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              voice_id: voice.voice_id,
+              api_key: apisData.api_key
+            })
+          });
+
+          if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`Erro ElevenLabs (Edge Function): ${response.status} - ${errorData.error || response.statusText}`);
+          }
+
+          const result = await response.json();
+          previewUrl = result.data?.preview_url;
+          console.log('✅ [generateVoiceTest] Preview obtido via Edge Function');
         }
 
-        const voiceData = await response.json();
-        
-        if (!voiceData.preview_url) {
+        if (!previewUrl) {
           throw new Error('Nenhum preview de áudio disponível para esta voz ElevenLabs');
         }
-        
-        return voiceData.preview_url;
+
+        return previewUrl;
 
       } else if (voice.plataforma === 'Fish-Audio') {
         const { data: apisData } = await supabase
@@ -993,6 +1024,9 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
     { value: 'Gemini-2.5-Pro', label: 'Gemini-2.5-Pro', icon: Wand2 }
   ] as const;
 
+  // Calcular a voz selecionada para usar na lógica de step do controle de velocidade
+  const selectedVoice = selectedVoiceId ? voices.find(v => v.id === selectedVoiceId) : null;
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-black to-gray-900">
       <PageHeader
@@ -1348,21 +1382,21 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
               {selectedWebhookOption.requiresVoice && (
                 <div className="space-y-2">
                   <label className="block text-sm font-medium text-gray-300">
-                    Velocidade do Áudio: {audioSpeed}x
+                    Velocidade do Áudio: {audioSpeed.toFixed(selectedVoice?.plataforma === 'ElevenLabs' ? 2 : 1)}x
                   </label>
                   <input
                     type="range"
-                    min="0.8"
-                    max="1.2"
-                    step="0.1"
+                    min="0.90"
+                    max="1.10"
+                    step={selectedVoice?.plataforma === 'ElevenLabs' ? '0.01' : '0.1'}
                     value={audioSpeed}
                     onChange={(e) => setAudioSpeed(parseFloat(e.target.value))}
                     className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer slider"
                   />
                   <div className="flex justify-between text-xs text-gray-400">
-                    <span>0.8x (Lento)</span>
+                    <span>0.90x (Lento)</span>
                     <span>1.0x (Normal)</span>
-                    <span>1.2x (Rápido)</span>
+                    <span>1.10x (Rápido)</span>
                   </div>
                 </div>
               )}

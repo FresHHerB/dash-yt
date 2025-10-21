@@ -26,7 +26,7 @@ interface ScriptData {
 interface TrainingData {
   channelName: string;
   scripts: ScriptData[];
-  model: 'GPT-5' | 'GPT-4.1-mini' | 'Sonnet-4' | 'Gemini-2.5-Pro' | 'Gemini-2.5-Flash';
+  model: 'GPT-5' | 'GPT-4.1-mini' | 'Sonnet-4.5' | 'Gemini-2.5-Pro' | 'Gemini-2.5-Flash';
 }
 
 interface TrainingPageProps {
@@ -305,7 +305,7 @@ const TrainingPage: React.FC<TrainingPageProps> = ({ user, onBack, onNavigate })
             >
               <option value="GPT-4.1-mini">GPT-4.1-mini</option>
               <option value="GPT-5">GPT-5</option>
-              <option value="Sonnet-4">Sonnet-4</option>
+              <option value="Sonnet-4.5">Sonnet-4.5</option>
               <option value="Gemini-2.5-Pro">Gemini-2.5-Pro</option>
               <option value="Gemini-2.5-Flash">Gemini-2.5-Flash</option>
             </select>

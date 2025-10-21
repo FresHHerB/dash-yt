@@ -1307,7 +1307,7 @@ const ScriptGenerationPage: React.FC<ScriptGenerationPageProps> = ({ user, onBac
                       <option value="">Selecione um modelo</option>
                       <option value="GPT-5">GPT-5</option>
                       <option value="GPT-4.1-mini">GPT-4.1-mini</option>
-                      <option value="Sonnet-4">Sonnet-4.5</option>
+                      <option value="Sonnet-4.5">Sonnet-4.5</option>
                       <option value="Gemini-2.5-Pro">Gemini-2.5-Pro</option>
                       <option value="Gemini-2.5-Flash">Gemini-2.5-Flash</option>
                     </select>
